@@ -1,0 +1,211 @@
+@import "tailwindcss";
+@import "../components/iso/iso.css";
+
+@theme {
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument), ui-serif, Georgia, serif;
+
+  --color-paper: #f6f3ee;
+  --color-sand: #efebe4;
+  --color-stone: #e7e2d9;
+  --color-line: #dfd9ce;
+  --color-line-strong: #c9c1b3;
+  --color-ink: #1d1f1e;
+  --color-ink-2: #474a46;
+  --color-muted: #7a7972;
+  --color-faint: #a7a49b;
+  --color-moss: #4e6151;
+  --color-moss-2: #3d4d40;
+  --color-moss-soft: #e1e7dc;
+  --color-clay: #b5643f;
+  --color-clay-soft: #f2e1d6;
+  --color-card: #fbfaf7;
+
+  --shadow-lift: 0 0 0 1px #1d1f1e0f, 0 1px 1px -0.5px #1d1f1e0a, 0 3px 3px -1.5px #1d1f1e0a, 0 8px 12px -6px #1d1f1e10;
+  --shadow-pop: 0 0 0 1px #1d1f1e14, 0 12px 32px -12px #1d1f1e33, 0 4px 8px -4px #1d1f1e14;
+  --ease-out-soft: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: var(--color-moss-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-moss);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The anatomy figures, retuned from neutral grey to the studio's warm stone. */
+.iso[data-theme="light"].af-iso {
+  --anatomy-page: #f6f3ee;
+  --anatomy-card: #fbfaf7;
+  --anatomy-text: #5c5d58;
+  --anatomy-strong: #1d1f1e;
+  --anatomy-muted: #8d8b83;
+  --anatomy-paper: #fbfaf7;
+  --anatomy-face: #ffffff;
+  --anatomy-top: #fffefb;
+  --anatomy-shade-0: #ddd6c9;
+  --anatomy-shade-1: #e6e0d5;
+  --anatomy-shade-2: #eee9e0;
+  --anatomy-shade-3: #f5f1ea;
+  --anatomy-lit-top: #ffffff;
+  --anatomy-lit-shade: #efeae1;
+  --anatomy-hi: #262826;
+  --anatomy-mid: #8a877e;
+  --anatomy-lo: #b7b2a7;
+  --anatomy-faint: #d8d2c6;
+  --anatomy-lit: #3d4d40;
+  --anatomy-halo: #8a8170;
+  --anatomy-halo-opacity: 0.3;
+  --anatomy-dot: #3a3b37;
+  --anatomy-green: #4e6151;
+  --anatomy-red: #b5643f;
+  --anatomy-blue: #5d7f86;
+  --anatomy-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --anatomy-lift: var(--shadow-lift);
+}
+
+/* Glass in the figures: a cool tint on paper, brighter once lit. */
+.af-glass {
+  fill: #c9d5d3;
+  stroke: none;
+}
+.af-glass[data-lit] {
+  fill: #f2d9a8;
+}
+.af-glass-sheen {
+  fill: #ffffff;
+  opacity: 0.55;
+  stroke: none;
+}
+.af-plan-line {
+  fill: none;
+  stroke: var(--anatomy-mid);
+  stroke-width: 0.6px;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+
+@keyframes af-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.af-enter {
+  animation: af-fade-up 520ms var(--ease-out-soft) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-enter {
+    animation: none;
+  }
+}
+
+/* Range inputs in the properties panel. */
+input[type="range"].af-range {
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-line);
+  accent-color: var(--color-moss);
+}
+input[type="range"].af-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--color-line-strong);
+  box-shadow: var(--shadow-lift);
+}
+
+/* Construction figure: plan lines draw themselves, glass warms at the light stage. */
+.af-draw path {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: var(--draw, 0);
+  vector-effect: none;
+  stroke-width: 0.9px;
+}
+.af-build .af-glass {
+  transition: fill 1.4s var(--ease-out-soft);
+}
+.af-build[data-glow] .af-glass {
+  fill: #f0d7a6;
+}
+.af-build[data-glow] .af-glass-sheen {
+  opacity: 0.35;
+}
+
+/* 2D plan drawing tokens */
+.af-plan {
+  --plan-ink: #262826;
+  --plan-ink-2: #5a5c57;
+  --plan-ink-3: #9a968c;
+  --plan-paper: #fbfaf7;
+  --plan-glass: #dfe7e6;
+  --plan-sel: #dbe3d4;
+  --plan-accent: #4e6151;
+  --plan-leaf: #d9e0cf;
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-sans);
+}
+.af-plan rect,
+.af-plan path,
+.af-plan circle,
+.af-plan ellipse {
+  vector-effect: non-scaling-stroke;
+}
+
+/* Drafting grid behind canvases */
+.af-grid {
+  background-color: var(--color-sand);
+  background-image: linear-gradient(to right, #1d1f1e0a 1px, transparent 1px), linear-gradient(to bottom, #1d1f1e0a 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@keyframes af-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes af-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.af-skeleton {
+  background: linear-gradient(90deg, var(--color-stone) 0%, var(--color-sand) 50%, var(--color-stone) 100%);
+  background-size: 200% 100%;
+  animation: af-shimmer 1.6s linear infinite;
+}
