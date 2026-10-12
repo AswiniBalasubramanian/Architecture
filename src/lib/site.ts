@@ -5,7 +5,7 @@ export const SITE = {
   name: "ARCHFORM",
   studio: "Studio Ash & Builders",
   author: "Aswini Balasubramanian",
-  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://studio-architecture-byaswini.vercel.app").replace(/\/$/, ""),
+  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://studioarchitecturebyaswini.vercel.app").replace(/\/$/, ""),
   title: "ARCHFORM — AI-assisted home design studio for architects",
   description:
     "ARCHFORM turns a plot size, built-up area, rooms and budget into an editable house concept: three zoning directions, a live 2D floor plan, a textured 3D model, curated finishes and a shareable buyer walkthrough.",
