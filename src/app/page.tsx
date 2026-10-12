@@ -1,20 +1,27 @@
-"use client";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { EntryRedirect } from "@/components/EntryRedirect";
+import { SITE } from "@/lib/site";
 
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { homeFor, useSession } from "@/lib/session";
+export const metadata: Metadata = {
+  // The entry only routes people; crawlers are pointed at the public page.
+  alternates: { canonical: "/about" },
+};
 
 /** Entry point: sign in first, then go to the home for your role. */
 export default function Entry() {
-  const session = useSession();
-  const router = useRouter();
-  React.useEffect(() => {
-    if (session === undefined) return;
-    router.replace(session ? homeFor(session.role) : "/login");
-  }, [session, router]);
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center" role="status" aria-label="Opening ARCHFORM">
-      <div className="af-skeleton h-1 w-32 rounded-full" />
-    </div>
+    <>
+      <EntryRedirect />
+      <noscript>
+        <main style={{ padding: 32, fontFamily: "sans-serif" }}>
+          <h1>{SITE.name}</h1>
+          <p>{SITE.description}</p>
+          <p>
+            <Link href="/about">About ARCHFORM</Link> · <Link href="/login">Sign in</Link>
+          </p>
+        </main>
+      </noscript>
+    </>
   );
 }

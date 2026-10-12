@@ -1,7 +1,15 @@
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { HeroFigure, SampleButton, SamplePlan } from "@/components/landing/HeroFigure";
 import { ButtonLink, Eyebrow, Logo, SiteHeader } from "@/components/ui/kit";
+import type { Metadata } from "next";
 import { EXTERIOR_TEMPLATES, INTERIOR_TEMPLATES } from "@/lib/catalog";
+import { FAQ, SITE, structuredData } from "@/lib/site";
+
+export const metadata: Metadata = {
+  title: { absolute: SITE.title },
+  description: SITE.description,
+  alternates: { canonical: "/about" },
+};
 
 const STEPS = [
   { verb: "Configure", note: "Plot, area, rooms, budget" },
@@ -15,6 +23,7 @@ const STEPS = [
 export default function Landing() {
   return (
     <div className="min-h-[100dvh]">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData()) }} />
       <SiteHeader right={<ButtonLink href="/new" variant="primary" size="sm" className="ml-2">New project</ButtonLink>} />
 
       {/* Hero: copy left, the live site model right. */}
@@ -124,6 +133,25 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Questions people ask — written as plain answers for search and answer engines. */}
+      <section id="faq" aria-labelledby="faq-title" className="border-t border-line bg-card/50">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-10 px-4 py-20 md:px-8 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:gap-20">
+          <div className="flex max-w-[420px] flex-col gap-4">
+            <Eyebrow>Questions</Eyebrow>
+            <h2 id="faq-title" className="text-[30px] font-medium leading-[1.1] tracking-[-0.02em] md:text-[38px]">What architects ask first.</h2>
+            <p className="text-[15px] leading-relaxed text-ink-2">Short answers about how ARCHFORM works, what it produces and where your data lives.</p>
+          </div>
+          <dl className="divide-y divide-line border-y border-line">
+            {FAQ.map(({ q, a }) => (
+              <div key={q} className="grid grid-cols-1 gap-2 py-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] md:gap-8">
+                <dt className="text-[15px] font-medium text-ink">{q}</dt>
+                <dd className="text-[14px] leading-relaxed text-ink-2">{a}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
