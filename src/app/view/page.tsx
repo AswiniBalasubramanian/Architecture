@@ -82,6 +82,8 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
   const [roomId, setRoomId] = React.useState<string | null>(null);
   const [tour, setTour] = React.useState<Tour | null>(null);
   const [ended, setEnded] = React.useState(false);
+  // The walkthrough's own day/night switch; null follows the design's lighting.
+  const [tourNight, setTourNight] = React.useState<boolean | null>(null);
   const [full, setFull] = React.useState(false);
   const [panel, setPanel] = React.useState<"rooms" | "finishes" | null>("rooms");
   const [gl, setGl] = React.useState(true);
@@ -108,6 +110,7 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
     setTour(scene.current?.startTour() ?? null);
   };
   const endTour = () => {
+    setTourNight(null);
     scene.current?.stopTour();
     setTour(null);
     setEnded(false);
@@ -123,7 +126,8 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
   return (
     <div ref={root} className="relative h-[100dvh] w-full overflow-hidden bg-sand">
       {gl ? (
-        <LazyHouseScene ref={scene} brief={brief} design={design} intro onTourEnd={() => setEnded(true)} maxFloor={isolate && !walking ? floor : brief.floors - 1} cutaway={isolate && !walking} selectedRoom={roomId} onSelectRoom={(id) => setRoomId(id)} className="absolute inset-0" />
+        <LazyHouseScene ref={scene} brief={brief} design={design} intro onTourEnd={() => setEnded(true)}
+                    hour={tour && tourNight !== null ? (tourNight ? 19.8 : 10.5) : undefined} maxFloor={isolate && !walking ? floor : brief.floors - 1} cutaway={isolate && !walking} selectedRoom={roomId} onSelectRoom={(id) => setRoomId(id)} className="absolute inset-0" />
       ) : (
         <div className="flex h-full items-center justify-center p-8 text-center text-[14px] text-muted">3D needs WebGL, which is turned off in this browser. Room details and finishes are listed on the left.</div>
       )}
@@ -275,7 +279,7 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
         </div>
       ) : null}
 
-      {walking && tour ? <Walkthrough scene={scene} design={design} tour={tour} ended={ended} onExit={endTour} /> : null}
+      {walking && tour ? <Walkthrough scene={scene} design={design} tour={tour} ended={ended} onExit={endTour} night={tourNight ?? (design.lighting.hour < 6.2 || design.lighting.hour > 18.6)} onNight={setTourNight} /> : null}
     </div>
   );
 }

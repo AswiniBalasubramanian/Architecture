@@ -41,6 +41,8 @@ interface Props {
   autoRotate?: boolean;
   /** Called when the walkthrough reaches its last frame. */
   onTourEnd?: () => void;
+  /** Override the time of day without touching the design (the walkthrough's day/night switch). */
+  hour?: number;
 }
 
 export { sunAt };
@@ -284,10 +286,10 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
 });
 
 export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseScene(
-  { brief, design, maxFloor, cutaway = false, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, intro = false, className, onReady, autoRotate = false, onTourEnd },
+  { brief, design, maxFloor, cutaway = false, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, intro = false, className, onReady, autoRotate = false, onTourEnd, hour: hourOverride },
   ref,
 ) {
-  const hour = design.lighting.hour;
+  const hour = hourOverride ?? design.lighting.hour;
   const { night, golden } = sunAt(hour);
   const [touring, setTouring] = React.useState(false);
   // Interiors are shown lit during the walkthrough, as they would be photographed.

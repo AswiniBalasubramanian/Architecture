@@ -88,6 +88,8 @@ export default function StudioPage() {
   const [toast, setToast] = React.useState<string | null>(null);
   const [tour, setTour] = React.useState<Tour | null>(null);
   const [ended, setEnded] = React.useState(false);
+  // The walkthrough's own day/night switch; null follows the design's lighting.
+  const [tourNight, setTourNight] = React.useState<boolean | null>(null);
 
   React.useEffect(() => setGl(webglAvailable()), []);
 
@@ -156,6 +158,7 @@ export default function StudioPage() {
     setTour(scene.current?.startTour() ?? null);
   };
   const endTour = () => {
+    setTourNight(null);
     scene.current?.stopTour();
     setTour(null);
   };
@@ -323,6 +326,7 @@ export default function StudioPage() {
                     onSelectFurniture={(fid) => fid && selectFurniture(fid)}
                     className="absolute inset-0"
                     onTourEnd={() => setEnded(true)}
+                    hour={tour && tourNight !== null ? (tourNight ? 19.8 : 10.5) : undefined}
                   />
                   <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1 rounded-xl border border-line bg-card/95 p-1 shadow-[var(--shadow-lift)] backdrop-blur">
                     {(["aerial", "front", "side", "top"] as CameraPreset[]).map((p) => (
@@ -343,7 +347,7 @@ export default function StudioPage() {
                     </IconButton>
                   </div>
                   {walking && tour ? (
-                    <Walkthrough scene={scene} design={design} tour={tour} ended={ended} onExit={endTour} />
+                    <Walkthrough scene={scene} design={design} tour={tour} ended={ended} onExit={endTour} night={tourNight ?? (design.lighting.hour < 6.2 || design.lighting.hour > 18.6)} onNight={setTourNight} />
                   ) : (
                     <p className="pointer-events-none absolute bottom-3 right-3 hidden rounded-full bg-card/90 px-3 py-1 font-mono text-[10px] text-muted md:block">Click a floor to select a room · drag to orbit</p>
                   )}

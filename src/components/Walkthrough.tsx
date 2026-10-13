@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import clsx from "clsx";
-import { ArrowsOutCardinal, CaretLeft, CaretRight, Pause, Play, X } from "@phosphor-icons/react";
+import { ArrowsOutCardinal, CaretLeft, CaretRight, Moon, Pause, Play, Sun, X } from "@phosphor-icons/react";
 import { fmtFt } from "@/components/plan/FloorPlan";
 import type { SceneHandle, Tour } from "@/components/three/HouseScene";
 import type { Design } from "@/lib/types";
@@ -22,7 +22,7 @@ function chapterIndex(tour: Tour, t: number) {
  * timeline with chapter ticks, and transport controls. The camera itself is
  * driven inside the canvas; this only reads its clock.
  */
-export function Walkthrough({ scene, design, tour, onExit, ended }: { scene: React.RefObject<SceneHandle | null>; design: Design; tour: Tour; onExit: () => void; ended: boolean }) {
+export function Walkthrough({ scene, design, tour, onExit, ended, night, onNight }: { scene: React.RefObject<SceneHandle | null>; design: Design; tour: Tour; onExit: () => void; ended: boolean; night: boolean; onNight: (night: boolean) => void }) {
   const [playing, setPlaying] = React.useState(true);
   const [chapter, setChapter] = React.useState(0);
   const [hint, setHint] = React.useState(true);
@@ -78,6 +78,7 @@ export function Walkthrough({ scene, design, tour, onExit, ended }: { scene: Rea
       if (e.key === "ArrowRight") jump(chapter + 1);
       if (e.key === "ArrowLeft") jump(scene.current && scene.current.tourTime() - (tour.chapters[chapter]?.t ?? 0) > 1.5 ? chapter : chapter - 1);
       if (e.key === "Escape") onExit();
+      if (e.key.toLowerCase() === "n") onNight(!night);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -169,6 +170,14 @@ export function Walkthrough({ scene, design, tour, onExit, ended }: { scene: Rea
             {tour.chapters.map((ch, i) => (
               <button key={i} type="button" onClick={() => jump(i)} className={clsx("shrink-0 rounded-full px-3 py-1.5 text-[12px] transition", i === chapter ? "bg-white/90 text-[#141615]" : "text-white/70 hover:bg-white/10 hover:text-white")}>
                 {ch.title}
+              </button>
+            ))}
+          </div>
+          <div role="radiogroup" aria-label="Walkthrough lighting" className="ml-2 flex h-10 items-center rounded-full border border-white/25 p-1">
+            {([false, true] as const).map((n) => (
+              <button key={String(n)} type="button" role="radio" aria-checked={night === n} aria-label={n ? "Night" : "Day"} title={n ? "Night (N)" : "Day (N)"} onClick={() => onNight(n)} className={clsx("flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] transition active:scale-95", night === n ? "bg-white text-[#141615]" : "text-white/75 hover:text-white")}>
+                {n ? <Moon size={14} weight={night === n ? "fill" : "regular"} /> : <Sun size={14} weight={night === n ? "fill" : "regular"} />}
+                <span className="hidden sm:inline">{n ? "Night" : "Day"}</span>
               </button>
             ))}
           </div>
