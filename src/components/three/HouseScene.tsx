@@ -292,7 +292,7 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
   const [touring, setTouring] = React.useState(false);
   // Interiors are shown lit during the walkthrough, as they would be photographed.
   const lit = night || design.lighting.interior || touring;
-  const bg = night ? "#0d1320" : "#e9e5dc";
+  const bg = night ? "#141a2a" : "#e9e5dc";
   return (
     <div className={className}>
       <Canvas
@@ -311,7 +311,7 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
         }}
       >
         <color attach="background" args={[bg]} />
-        <fog attach="fog" args={[night ? "#121a29" : "#e9e5dc", night ? 180 : 220, night ? 700 : 620]} />
+        <fog attach="fog" args={[night ? "#1f2536" : "#e9e5dc", night ? 170 : 220, night ? 680 : 620]} />
         <Lights hour={hour} night={night} />
         {night ? <NightSky /> : null}
         <Site brief={brief} design={design} lit={lit} night={night} />

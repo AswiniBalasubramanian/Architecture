@@ -78,6 +78,8 @@ function useFacadeMaterials(night: boolean) {
       leaf: new THREE.MeshStandardMaterial({ color: "#4f7a3a", roughness: 0.9, flatShading: true }),
       leafLight: new THREE.MeshStandardMaterial({ color: "#7aa24c", roughness: 0.9, flatShading: true }),
       downlight: night ? new THREE.MeshStandardMaterial({ color: "#fff4e0", emissive: "#ffd39a", emissiveIntensity: 6 }) : new THREE.MeshStandardMaterial({ color: "#e9e4da", roughness: 0.3, metalness: 0.4 }),
+      led: night ? new THREE.MeshStandardMaterial({ color: "#fff1d6", emissive: "#ffc477", emissiveIntensity: 5 }) : new THREE.MeshStandardMaterial({ color: "#d9d5cc", roughness: 0.5 }),
+      uplight: new THREE.MeshStandardMaterial({ color: "#fff4e2", emissive: "#ffd29a", emissiveIntensity: night ? 6 : 0 }),
       scallop: new THREE.MeshBasicMaterial({ map: scallopTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color("#ffb877").multiplyScalar(1.6), toneMapped: true }),
     }),
     [night],
@@ -251,6 +253,48 @@ export function Facade({ brief, design, mats, night, maxFloor, cutaway }: { brie
       const p = toWorld(f, c, fp.y - 2, PLINTH + 8.2);
       add(<Spot position={p} target={[p.x, 0, p.z]} angle={0.9} penumbra={0.8} intensity={60} distance={18} decay={1.5} color="#ffcf96" />);
     }
+  }
+  if (night) {
+    // In-ground uplights grazing every wall, on the stretches between openings.
+    const H = Math.min(19, roofZ * 0.62);
+    const sides: Array<{ side: "front" | "back" | "left" | "right"; a: number; b: number; at: (t: number, off: number) => [number, number]; ry: number }> = [
+      { side: "front", a: fp.x, b: fp.x + fp.w, at: (t, off) => [t, fp.y - off], ry: 0 },
+      { side: "back", a: fp.x, b: fp.x + fp.w, at: (t, off) => [t, fp.y + fp.d + off], ry: Math.PI },
+      { side: "left", a: fp.y, b: fp.y + fp.d, at: (t, off) => [fp.x - off, t], ry: -Math.PI / 2 },
+      { side: "right", a: fp.y, b: fp.y + fp.d, at: (t, off) => [fp.x + fp.w + off, t], ry: Math.PI / 2 },
+    ];
+    for (const sd of sides) {
+      const ops = openingsOf(design, 0).filter((o) => o.side === sd.side);
+      for (const [a, b] of freeSpans(ops, sd.a + 0.8, sd.b - 0.8, 0.9)) {
+        const n = Math.max(1, Math.floor((b - a) / 7));
+        for (let i = 0; i < n; i++) {
+          const t = a + ((i + 0.5) * (b - a)) / n;
+          const [fx, fy] = sd.at(t, 0.7);
+          const [wx, wy] = sd.at(t, 0.05);
+          add(<Block x0={fx - 0.22} x1={fx + 0.22} y0={fy - 0.22} y1={fy + 0.22} z0={0.05} z1={0.16} mat={mats.dark} cast={false} />);
+          add(<Block x0={fx - 0.15} x1={fx + 0.15} y0={fy - 0.15} y1={fy + 0.15} z0={0.16} z1={0.18} mat={fm.uplight} cast={false} />);
+          add(
+            <mesh position={toWorld(f, wx, wy, PLINTH * 0.4 + H / 2)} rotation={[0, sd.ry, Math.PI]} material={fm.scallop} renderOrder={2}>
+              <planeGeometry args={[H * 0.36, H]} />
+            </mesh>,
+          );
+        }
+      }
+    }
+    // LED lines along the balcony slab edges, the top band and the glass rail shoes.
+    if (framed) {
+      for (let k = 1; k < floors && k <= maxFloor; k++) {
+        const z = level(k);
+        add(<Block x0={xa + 0.05} x1={xb - 0.05} y0={fp.y - D + 0.06} y1={fp.y - D + 0.16} z0={z - SLAB - 0.16} z1={z - SLAB - 0.1} mat={fm.led} cast={false} />);
+        add(<Block x0={xa + 0.15} x1={xb - 0.15} y0={fp.y - D + 0.36} y1={fp.y - D + 0.42} z0={z + 0.02} z1={z + 0.08} mat={fm.led} cast={false} />);
+      }
+      if (topShown) {
+        const bandZ = roofZ - SLAB - 0.7;
+        add(<Block x0={xa + 0.05} x1={xb - 0.05} y0={fp.y - D - 0.28} y1={fp.y - D - 0.18} z0={bandZ - 0.16} z1={bandZ - 0.1} mat={fm.led} cast={false} />);
+      }
+    }
+    // Warm bounce off the forecourt onto the white render.
+    add(<pointLight position={toWorld(f, fp.x + fp.w / 2, fp.y - 7, 3)} intensity={26} distance={34} decay={1.4} color="#ffc98f" />);
   }
   return <>{parts}</>;
 }

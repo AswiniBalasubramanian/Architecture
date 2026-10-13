@@ -67,7 +67,7 @@ A web studio that turns a plot and a brief into an explorable home concept, then
 - New default "Elite White" scheme: smooth satin white render, teak cladding, charcoal frames
 - Projecting white frame with glass-rail balconies, timber soffits, recessed downlights, planters, vertical timber screen, stone-clad panel with wall washers
 - Coconut and areca palms, leafy canopies, lush lawn, timber gate in a steel frame, residence name plate
-- Night: gradient sky, stars and moon, moonlight, warm interiors, wall-wash scallops, drive bollards, lantern glows, palm uplights
+- Night (blue hour): twilight sky with a warm horizon, stars and moon, cool moonlight on the white render; in-ground uplights grazing every wall, LED lines under balcony edges and rail shoes, soffit downlight scallops, compound-wall washes, drive bollards, lantern glows, palm uplights
 - Light colour grade and vignette for a rendered-photo finish
 
 ### Premium interiors

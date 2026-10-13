@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { Environment, Lightformer, Sky, Stars } from "@react-three/drei";
 import type { Brief, Design } from "@/lib/types";
 import { toWorld } from "./HouseModel";
-import { Spot, glowTexture } from "./Facade";
+import { Spot, glowTexture, scallopTexture } from "./Facade";
 import { Palm } from "./Palms";
 import { materialFor, surfaceMaterial } from "./textures";
 
@@ -174,6 +174,19 @@ export function Site({ brief, design, lit, night = false }: { brief: Brief; desi
     for (let y = 2.5; y < len; y += 6) out.push([gate[0] - 0.9, y], [gate[1] + 0.9, y]);
     return out;
   }, [fp.y, gate]);
+  // Front compound wall: small coping lights, each washing down the street face.
+  const wallLights = React.useMemo(() => {
+    const out: number[] = [];
+    const runs: Array<[number, number]> = [];
+    if (gate[0] - 1 > 2) runs.push([0.8, gate[0] - 2.2]);
+    if (W - gate[1] - 1 > 2) runs.push([gate[1] + 2.2, W - 0.8]);
+    for (const [a, b] of runs) {
+      const n = Math.max(1, Math.round((b - a) / 6));
+      for (let i = 0; i < n; i++) out.push(a + ((i + 0.5) * (b - a)) / n);
+    }
+    return out;
+  }, [gate, W]);
+  const washMat = React.useMemo(() => new THREE.MeshBasicMaterial({ map: scallopTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color("#ffb877").multiplyScalar(1.4) }), []);
   const glowSprite = React.useMemo(() => new THREE.SpriteMaterial({ map: glowTexture(), color: "#ffc58a", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), []);
   // Street lamps along the far kerb.
   const lamps = [-30, 20, 70].map((x) => x + (W % 10));
@@ -249,6 +262,14 @@ export function Site({ brief, design, lit, night = false }: { brief: Brief; desi
       ))}
             {night ? (
         <>
+          {wallLights.map((x, i) => (
+            <group key={`wl${i}`}>
+              {box(`wlf${i}`, x - 0.3, x + 0.3, -0.12, 0.05, 3.0, 3.2, mats.lamp, false)}
+              <mesh position={W3(x, -0.04, 1.55)} material={washMat} renderOrder={2}>
+                <planeGeometry args={[2.6, 3.1]} />
+              </mesh>
+            </group>
+          ))}
           {/* Bollards along the drive, each with a pool of light. */}
           {bollards.map(([x, y], i) => (
             <group key={`bo${i}`}>
@@ -316,7 +337,7 @@ export function NightSky() {
         uniforms: {},
         vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
         fragmentShader:
-          "varying vec3 vP; void main(){ float h = clamp(vP.y, -0.2, 1.0); vec3 top = vec3(0.012,0.022,0.06); vec3 mid = vec3(0.035,0.06,0.13); vec3 hor = vec3(0.12,0.13,0.2); vec3 c = mix(hor, mid, smoothstep(0.0, 0.18, h)); c = mix(c, top, smoothstep(0.18, 0.75, h)); gl_FragColor = vec4(c, 1.0); }",
+          "varying vec3 vP; void main(){ float h = clamp(vP.y, -0.2, 1.0); vec3 top = vec3(0.018,0.032,0.085); vec3 mid = vec3(0.055,0.095,0.21); vec3 hor = vec3(0.24,0.23,0.33); vec3 glow = vec3(0.46,0.31,0.27); vec3 c = mix(glow, hor, smoothstep(-0.02, 0.07, h)); c = mix(c, mid, smoothstep(0.07, 0.26, h)); c = mix(c, top, smoothstep(0.26, 0.8, h)); gl_FragColor = vec4(c, 1.0); }",
       }),
     [],
   );
@@ -366,15 +387,15 @@ export function Lights({ hour, night }: { hour: number; night: boolean }) {
     cam.updateProjectionMatrix();
   }, []);
   const color = sun.golden ? "#ffcf9a" : "#fff4e2";
-  const intensity = night ? 0.42 : 0.7 + Math.max(0, sun.up) * 2.6;
+  const intensity = night ? 0.62 : 0.7 + Math.max(0, sun.up) * 2.6;
   return (
     <>
-      <hemisphereLight args={[night ? "#3a4b70" : "#f2eee4", night ? "#14171c" : "#9c9480", night ? 0.32 : 0.55]} />
-      <directionalLight ref={ref} position={pos} intensity={intensity} color={night ? "#a9bde0" : color} castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096} shadow-bias={-0.0006} shadow-normalBias={0.09} shadow-radius={4} />
+      <hemisphereLight args={[night ? "#5d73a3" : "#f2eee4", night ? "#1a1d24" : "#9c9480", night ? 0.5 : 0.55]} />
+      <directionalLight ref={ref} position={pos} intensity={intensity} color={night ? "#b6c7ea" : color} castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096} shadow-bias={-0.0006} shadow-normalBias={0.09} shadow-radius={4} />
       {night ? null : <Sky sunPosition={[sun.dir.x, Math.max(sun.up, night ? -0.08 : 0.02), sun.dir.z]} turbidity={night ? 2 : 5} rayleigh={night ? 0.3 : sun.golden ? 2.2 : 1.1} mieCoefficient={0.004} mieDirectionalG={0.82} distance={4500} />}
       {/* Studio reflections built from light panels, so nothing is downloaded. */}
-      <Environment resolution={256} frames={1} environmentIntensity={night ? 0.15 : 0.6}>
-        <Lightformer form="rect" intensity={night ? 0.2 : 2} color={night ? "#4a5a78" : "#fff8ec"} position={[0, 40, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[120, 120, 1]} />
+      <Environment resolution={256} frames={1} environmentIntensity={night ? 0.32 : 0.6}>
+        <Lightformer form="rect" intensity={night ? 0.55 : 2} color={night ? "#5468a0" : "#fff8ec"} position={[0, 40, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[120, 120, 1]} />
         <Lightformer form="rect" intensity={night ? 0.1 : 1.1} color="#e9efe9" position={[-60, 18, 30]} rotation={[0, Math.PI / 2.5, 0]} scale={[60, 24, 1]} />
         <Lightformer form="rect" intensity={night ? 0.1 : 0.9} color="#f5e3cc" position={[60, 14, -20]} rotation={[0, -Math.PI / 2.2, 0]} scale={[60, 20, 1]} />
         <Lightformer form="ring" intensity={night ? 0 : 3} color={sun.golden ? "#ffcf9a" : "#fff6e6"} position={pos.clone().normalize().multiplyScalar(80)} scale={14} />
