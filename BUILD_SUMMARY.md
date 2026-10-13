@@ -58,6 +58,18 @@ A web studio that turns a plot and a brief into an explorable home concept, then
 - Rendering: sun by time of day, sky, PCF shadows, studio environment reflections, ambient occlusion (N8AO), bloom at night, ACES tone mapping, SMAA
 - Camera presets, cutaway / floor isolation, click-to-select rooms, room walkthrough
 
+### Cinematic walkthrough
+- One continuous camera path, no cuts: a full 360° orbit, arrival from the street, through the open front door, room to room through real doorways, a full turn in the main living spaces, up the stair through its stairwell, out through an upper window to the aerial view
+- Drag to look around 360° at any moment (eases back to the path), scroll to change lens
+- Chapter timeline: scrub, jump, play/pause, keyboard (Space, arrows, Esc); letterboxed captions with room sizes
+
+### Look: elite residence style
+- New default "Elite White" scheme: smooth satin white render, teak cladding, charcoal frames
+- Projecting white frame with glass-rail balconies, timber soffits, recessed downlights, planters, vertical timber screen, stone-clad panel with wall washers
+- Coconut and areca palms, leafy canopies, lush lawn, timber gate in a steel frame, residence name plate
+- Night: gradient sky, stars and moon, moonlight, warm interiors, wall-wash scallops, drive bollards, lantern glows, palm uplights
+- Light colour grade and vignette for a rendered-photo finish
+
 ### Studio
 - Exterior and interior schemes, per-surface materials and colours, per-room finishes and wall paint
 - Time-of-day slider, interior lights, furniture add / rotate / remove / re-furnish

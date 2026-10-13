@@ -4,9 +4,10 @@ import * as React from "react";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { FURNITURE } from "@/lib/catalog";
-import { openingsOf, partitionsOf, type Opening, type Side } from "@/lib/openings";
+import { flightOf, openingsOf, partitionsOf, type Opening, type Side } from "@/lib/openings";
 import type { Brief, Design, Furniture, MaterialChoice, Room } from "@/lib/types";
 import { materialFor, surfaceMaterial, textureFor, TILE } from "./textures";
+import { Facade } from "./Facade";
 
 export const PLINTH = 2;
 export const SLAB = 0.6;
@@ -17,12 +18,12 @@ interface Frame {
   cx: number;
   cy: number;
 }
-const FrameCtx = React.createContext<Frame>({ cx: 0, cy: 0 });
+export const FrameCtx = React.createContext<Frame>({ cx: 0, cy: 0 });
 
 /** Plan (x, y, z-up) in feet → three.js position. */
 export const toWorld = (f: Frame, x: number, y: number, z: number) => new THREE.Vector3(x - f.cx, z, f.cy - y);
 
-function Block({ x0, y0, x1, y1, z0, z1, mat, cast = true, receive = true, onClick, name }: { x0: number; y0: number; x1: number; y1: number; z0: number; z1: number; mat: THREE.Material | THREE.Material[]; cast?: boolean; receive?: boolean; onClick?: (e: ThreeEvent<MouseEvent>) => void; name?: string }) {
+export function Block({ x0, y0, x1, y1, z0, z1, mat, cast = true, receive = true, onClick, name }: { x0: number; y0: number; x1: number; y1: number; z0: number; z1: number; mat: THREE.Material | THREE.Material[]; cast?: boolean; receive?: boolean; onClick?: (e: ThreeEvent<MouseEvent>) => void; name?: string }) {
   const f = React.useContext(FrameCtx);
   const w = Math.abs(x1 - x0);
   const d = Math.abs(y1 - y0);
@@ -145,7 +146,7 @@ function useMaterials(design: Design, lit: boolean): MaterialsSet {
 
 /* ------------------------------------------------------------- walls */
 
-function SideWall({ side, openings, z0, z1, design, mats, top }: { side: Side; openings: Opening[]; z0: number; z1: number; design: Design; mats: MaterialsSet; top: number }) {
+function SideWall({ side, openings, z0, z1, design, mats, top, entryOpen = false }: { side: Side; openings: Opening[]; z0: number; z1: number; design: Design; mats: MaterialsSet; top: number; entryOpen?: boolean }) {
   const fp = design.footprint;
   const along = side === "front" || side === "back";
   // Wall extent along its axis, and its band across.
@@ -232,16 +233,19 @@ function SideWall({ side, openings, z0, z1, design, mats, top }: { side: Side; o
         at(o.a, o.a + ft, sill, gTop, 0.06, -0.55, mats.frames, `dj${i}`);
         at(o.b - ft, o.b, sill, gTop, 0.06, -0.55, mats.frames, `dk${i}`);
         at(o.a, o.b, gTop - ft, gTop, 0.06, -0.55, mats.frames, `dh${i}`);
-        at(o.a + ft, o.b - ft, sill, gTop - ft, -0.36, -0.52, mats.accent(w, gTop - sill), `dl${i}`);
+        if (entryOpen) {
+          // Swung open into the hall, hinged on the left jamb.
+          at(o.a + ft, o.a + ft + 0.18, sill, gTop - ft, -0.5, -0.5 - (w - ft * 2), mats.accent(w, gTop - sill), `dl${i}`);
+        } else at(o.a + ft, o.b - ft, sill, gTop - ft, -0.36, -0.52, mats.accent(w, gTop - sill), `dl${i}`);
         const pw = (w - ft * 2) / 2 - 0.35;
-        [0, 1].forEach((c) =>
+        if (!entryOpen) [0, 1].forEach((c) =>
           [0, 1, 2].forEach((r) => {
             const pa = o.a + ft + 0.25 + c * (pw + 0.2);
             const zb = sill + 0.6 + r * ((gTop - sill - 1.4) / 3);
             at(pa, pa + pw, zb, zb + (gTop - sill - 1.4) / 3 - 0.3, -0.3, -0.36, mats.accent(pw, 2), `dp${i}${c}${r}`);
           }),
         );
-        at(o.b - ft - 0.55, o.b - ft - 0.45, sill + 2.6, sill + 4.6, -0.12, -0.3, mats.metal, `dhd${i}`);
+        if (!entryOpen) at(o.b - ft - 0.55, o.b - ft - 0.45, sill + 2.6, sill + 4.6, -0.12, -0.3, mats.metal, `dhd${i}`);
         // Wall lights either side, and a house number plate.
         [o.a - 0.8, o.b + 0.5].forEach((x, k) => {
           at(x, x + 0.3, sill + 6.2, sill + 7.1, 0, 0.32, mats.dark, `wl${i}${k}`);
@@ -810,6 +814,32 @@ function Balustrade({ room, z0, rise, mats }: { room: Room; z0: number; rise: nu
   );
 }
 
+/** A room's slab or floor, with the stairwell over the flight left open. */
+function piecesOf(r: Room, well: boolean, rise: number): Array<[number, number, number, number]> {
+  if (!well) return [[r.x, r.x + r.w, r.y, r.y + r.d]];
+  const fl = flightOf(r, rise);
+  return [
+    [r.x, fl.x0, r.y, r.y + r.d],
+    [fl.x1, r.x + r.w, r.y, r.y + r.d],
+    [fl.x0, fl.x1, r.y, fl.y0],
+    [fl.x0, fl.x1, fl.y1, r.y + r.d],
+  ];
+}
+
+/** Glass guard with a timber handrail along the open sides of a stairwell. */
+function WellGuard({ room, z0, rise, mats }: { room: Room; z0: number; rise: number; mats: MaterialsSet }) {
+  const fl = flightOf(room, rise);
+  return (
+    <>
+      <Block x0={fl.x1 - 0.03} x1={fl.x1 + 0.03} y0={fl.y0} y1={fl.y1} z0={z0} z1={z0 + 3.2} mat={mats.glass} cast={false} />
+      <Block x0={fl.x0} x1={fl.x1} y0={fl.y0 - 0.03} y1={fl.y0 + 0.03} z0={z0} z1={z0 + 3.2} mat={mats.glass} cast={false} />
+      <Block x0={fl.x1 - 0.09} x1={fl.x1 + 0.09} y0={fl.y0 - 0.09} y1={fl.y1} z0={z0 + 3.2} z1={z0 + 3.38} mat={mats.wood} />
+      <Block x0={fl.x0} x1={fl.x1} y0={fl.y0 - 0.09} y1={fl.y0 + 0.09} z0={z0 + 3.2} z1={z0 + 3.38} mat={mats.wood} />
+      <Block x0={fl.x1 - 0.06} x1={fl.x1 + 0.06} y0={fl.y0} y1={fl.y1} z0={z0} z1={z0 + 0.12} mat={mats.metal} />
+    </>
+  );
+}
+
 function Pendants({ rooms, z, lit, mats }: { rooms: Room[]; z: number; lit: boolean; mats: MaterialsSet }) {
   const f = React.useContext(FrameCtx);
   return (
@@ -850,9 +880,13 @@ export interface HouseModelProps {
   onSelectRoom?: (id: string | null) => void;
   onSelectFurniture?: (id: string | null) => void;
   lit: boolean;
+  /** Night: exterior lighting, soffit downlights and wall washes switch on. */
+  night?: boolean;
+  /** Front door stands open (during the walkthrough). */
+  entryOpen?: boolean;
 }
 
-export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, lit }: HouseModelProps) {
+export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, lit, night = false, entryOpen = false }: HouseModelProps) {
   const fp = design.footprint;
   const frame = React.useMemo(() => ({ cx: fp.x + fp.w / 2, cy: fp.y + fp.d / 2 }), [fp]);
   const mats = useMaterials(design, lit);
@@ -868,6 +902,8 @@ export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, sel
   const floorsShown = Array.from({ length: Math.min(floors, maxFloor + 1) }, (_, f) => f);
   const roofZ = level(floors);
   const topRooms = design.rooms.filter((r) => r.floor === floors - 1);
+  // A stair room above another stair room has a stairwell cut through its slab.
+  const wellBelow = (r: Room, f: number) => f > 0 && r.type === "stair" && design.rooms.some((b) => b.floor === f - 1 && b.type === "stair" && Math.abs(b.x - r.x) < 0.01 && Math.abs(b.y - r.y) < 0.01);
 
   return (
     <FrameCtx.Provider value={frame}>
@@ -887,7 +923,7 @@ export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, sel
               {f > 0
                 ? rooms
                     .filter((r) => r.type !== "void")
-                    .map((r) => <Block key={`slab${r.id}`} x0={r.x} x1={r.x + r.w} y0={r.y} y1={r.y + r.d} z0={z0 - SLAB} z1={z0} mat={mats.slab} />)
+                    .flatMap((r) => piecesOf(r, wellBelow(r, f), FH).map(([x0, x1, y0, y1], k) => <Block key={`slab${r.id}${k}`} x0={x0} x1={x1} y0={y0} y1={y1} z0={z0 - SLAB} z1={z0} mat={mats.slab} />))
                 : null}
               {f > 0 ? (
                 <>
@@ -902,16 +938,20 @@ export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, sel
               {rooms.map((r) => {
                 if (r.type === "void") return null;
                 const m = r.type === "court" ? materialFor({ material: "stone", color: "#c9c0ae" }, r.w, r.d) : r.type === "parking" ? materialFor({ material: "concrete", color: "#b3b0a8" }, r.w, r.d) : mats.floor(r.finish, r.w, r.d);
+                const well = wellBelow(r, f);
                 return (
                   <React.Fragment key={`fin${r.id}`}>
-                    <Block x0={r.x + 0.05} x1={r.x + r.w - 0.05} y0={r.y + 0.05} y1={r.y + r.d - 0.05} z0={z0} z1={z0 + 0.06} mat={m} cast={false} onClick={selectRoom(r.id)} name={`room:${r.id}`} />
+                    {piecesOf(r, well, FH).map(([x0, x1, y0, y1], k) => (
+                      <Block key={k} x0={Math.max(x0, r.x + 0.05)} x1={Math.min(x1, r.x + r.w - 0.05)} y0={Math.max(y0, r.y + 0.05)} y1={Math.min(y1, r.y + r.d - 0.05)} z0={z0} z1={z0 + 0.06} mat={m} cast={false} onClick={selectRoom(r.id)} name={`room:${r.id}`} />
+                    ))}
+                    {well ? <WellGuard room={r} z0={z0} rise={FH} mats={mats} /> : null}
                     {selectedRoom === r.id ? <Block x0={r.x + 0.1} x1={r.x + r.w - 0.1} y0={r.y + 0.1} y1={r.y + r.d - 0.1} z0={z0 + 0.06} z1={z0 + 0.1} mat={mats.highlight} cast={false} receive={false} /> : null}
                   </React.Fragment>
                 );
               })}
               {/* Room wall paint shows on a thin lining inside each room's exterior walls. */}
               {(["front", "back", "left", "right"] as Side[]).map((side) => (
-                <SideWall key={side} side={side} openings={openings} z0={z0} z1={wallTop} top={cutAt} design={design} mats={mats} />
+                <SideWall key={side} side={side} openings={openings} z0={z0} z1={wallTop} top={cutAt} design={design} mats={mats} entryOpen={entryOpen && f === 0} />
               ))}
               <Partitions design={design} floor={f} z0={z0} z1={Math.min(cutAt, wallTop)} mats={mats} />
               {rooms
@@ -985,13 +1025,15 @@ export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, sel
         {/* Interior lights at night: one warm point per large room on visible floors. */}
         {lit
           ? design.rooms
-              .filter((r) => r.floor <= maxFloor && r.w * r.d > 120 && r.type !== "court" && r.type !== "parking" && r.type !== "void")
+              .filter((r) => r.floor <= maxFloor && r.w * r.d > 70 && r.type !== "court" && r.type !== "parking" && r.type !== "void" && r.type !== "stair")
+              .sort((a, b) => b.w * b.d - a.w * a.d)
               .slice(0, 6)
               .map((r) => {
-                const p = toWorld(frame, r.x + r.w / 2, r.y + r.d / 2, level(r.floor) + 7);
-                return <pointLight key={`l${r.id}`} position={p} intensity={18} distance={22} decay={1.6} color="#ffcf8f" />;
+                const p = toWorld(frame, r.x + r.w / 2, r.y + r.d / 2, level(r.floor) + FH - 2.2);
+                return <pointLight key={`l${r.id}`} position={p} intensity={night ? 22 : 14} distance={Math.max(r.w, r.d) * 1.7 + 6} decay={1.5} color={r.type === "bath" || r.type === "kitchen" ? "#ffe2b8" : "#ffc98a"} />;
               })
           : null}
+        <Facade brief={brief} design={design} mats={mats} night={night} maxFloor={maxFloor} cutaway={cutaway} />
       </group>
     </FrameCtx.Provider>
   );

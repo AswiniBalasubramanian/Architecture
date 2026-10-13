@@ -3,20 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { ArrowRight, ArrowsIn, ArrowsOut, CaretLeft, CaretRight, Pause, Play, Stack, X } from "@phosphor-icons/react";
+import { ArrowRight, ArrowsIn, ArrowsOut, CaretLeft, FilmSlate, Stack, X } from "@phosphor-icons/react";
 import { BuildFigure } from "@/components/build/BuildFigure";
 import { fmtFt } from "@/components/plan/FloorPlan";
-import type { CameraPreset, SceneHandle } from "@/components/three/HouseScene";
+import type { CameraPreset, SceneHandle, Tour } from "@/components/three/HouseScene";
+import { Walkthrough } from "@/components/Walkthrough";
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
 import { Button, Eyebrow, IconButton, Logo, buttonClass } from "@/components/ui/kit";
-import { HOUSE_TYPES, MATERIALS, ROOM_TYPES, SLOTS, floorName } from "@/lib/catalog";
+import { HOUSE_TYPES, MATERIALS, SLOTS, floorName } from "@/lib/catalog";
 import { statsOf } from "@/lib/generator";
 import { decodeShare } from "@/lib/persist";
 import { sqft } from "@/lib/projects";
 import { rememberViewed } from "@/lib/session";
 import type { MaterialSlot, Room, SharedProject } from "@/lib/types";
-
-const TOUR_MS = 5200;
 
 function Invalid() {
   return (
@@ -81,14 +80,13 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
   const [floor, setFloor] = React.useState<number>(brief.floors - 1);
   const [isolate, setIsolate] = React.useState(false);
   const [roomId, setRoomId] = React.useState<string | null>(null);
-  const [tour, setTour] = React.useState<number | null>(null);
-  const [paused, setPaused] = React.useState(false);
+  const [tour, setTour] = React.useState<Tour | null>(null);
+  const [ended, setEnded] = React.useState(false);
   const [full, setFull] = React.useState(false);
   const [panel, setPanel] = React.useState<"rooms" | "finishes" | null>("rooms");
   const [gl, setGl] = React.useState(true);
   React.useEffect(() => setGl(webglAvailable()), []);
   const s = statsOf(design, brief.floors);
-  const tourRooms = React.useMemo(() => design.rooms.filter((r) => ROOM_TYPES[r.type].habitable || r.type === "foyer" || r.type === "court"), [design]);
   const room = design.rooms.find((r) => r.id === roomId);
 
   const focus = (r: Room) => {
@@ -98,39 +96,22 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
   };
 
   React.useEffect(() => {
-    if (tour === null) return;
-    const r = tourRooms[tour];
-    if (!r) {
-      setTour(null);
-      scene.current?.view("aerial");
-      return;
-    }
-    focus(r);
-    if (paused) return;
-    const t = window.setTimeout(() => setTour((i) => (i === null ? null : i + 1)), TOUR_MS);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tour, paused]);
-
-  React.useEffect(() => {
     const onFs = () => setFull(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFs);
-    const onKey = (e: KeyboardEvent) => {
-      if (tour === null) return;
-      if (e.key === "ArrowRight") setTour((i) => Math.min(tourRooms.length - 1, (i ?? 0) + 1));
-      if (e.key === "ArrowLeft") setTour((i) => Math.max(0, (i ?? 0) - 1));
-      if (e.key === " ") {
-        e.preventDefault();
-        setPaused((p) => !p);
-      }
-      if (e.key === "Escape") setTour(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("fullscreenchange", onFs);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [tour, tourRooms.length]);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
+
+  const startTour = () => {
+    setRoomId(null);
+    setIsolate(false);
+    setEnded(false);
+    setTour(scene.current?.startTour() ?? null);
+  };
+  const endTour = () => {
+    scene.current?.stopTour();
+    setTour(null);
+    setEnded(false);
+  };
 
   const toggleFull = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -138,18 +119,17 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
   };
 
   const walking = tour !== null;
-  const current = walking ? tourRooms[tour!] : null;
 
   return (
     <div ref={root} className="relative h-[100dvh] w-full overflow-hidden bg-sand">
       {gl ? (
-        <LazyHouseScene ref={scene} brief={brief} design={design} intro maxFloor={isolate && !walking ? floor : brief.floors - 1} cutaway={isolate && !walking} selectedRoom={roomId} onSelectRoom={(id) => setRoomId(id)} className="absolute inset-0" />
+        <LazyHouseScene ref={scene} brief={brief} design={design} intro onTourEnd={() => setEnded(true)} maxFloor={isolate && !walking ? floor : brief.floors - 1} cutaway={isolate && !walking} selectedRoom={roomId} onSelectRoom={(id) => setRoomId(id)} className="absolute inset-0" />
       ) : (
         <div className="flex h-full items-center justify-center p-8 text-center text-[14px] text-muted">3D needs WebGL, which is turned off in this browser. Room details and finishes are listed on the left.</div>
       )}
 
       {/* Top bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3 md:p-4">
+      <div className={clsx("pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-3 transition-opacity duration-500 md:p-4", walking && "opacity-0 [&_*]:!pointer-events-none")}>
         <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-line bg-card/95 py-2 pl-3 pr-4 shadow-[var(--shadow-lift)] backdrop-blur">
           <IconButton label="Back to cover" onClick={onExit}>
             <CaretLeft size={16} />
@@ -166,9 +146,9 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
             </button>
           ))}
           <span className="mx-0.5 hidden h-4 w-px bg-line sm:block" />
-          <Button size="sm" variant={walking ? "primary" : "ghost"} onClick={() => (walking ? (setTour(null), scene.current?.view("aerial")) : (setPaused(false), setTour(0)))}>
-            {walking ? <X size={14} /> : <Play size={14} weight="fill" />}
-            {walking ? "End tour" : "Guided tour"}
+          <Button size="sm" variant="primary" onClick={startTour}>
+            <FilmSlate size={14} weight="fill" />
+            Walkthrough
           </Button>
           <IconButton label={full ? "Exit full screen" : "Full screen"} onClick={toggleFull}>
             {full ? <ArrowsIn size={16} /> : <ArrowsOut size={16} />}
@@ -177,7 +157,7 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
       </div>
 
       {/* Floors */}
-      <div className="absolute right-3 top-1/2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-line bg-card/95 p-1 shadow-[var(--shadow-lift)] backdrop-blur md:right-4" role="group" aria-label="Floors">
+      <div className={clsx("absolute right-3 top-1/2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-line bg-card/95 p-1 shadow-[var(--shadow-lift)] backdrop-blur transition-opacity duration-500 md:right-4", walking && "pointer-events-none opacity-0")} role="group" aria-label="Floors">
         <span className="flex justify-center py-1 text-muted" title="Isolate a floor">
           <Stack size={15} />
         </span>
@@ -295,31 +275,7 @@ function Explorer({ data, onExit }: { data: SharedProject; onExit: () => void })
         </div>
       ) : null}
 
-      {/* Tour caption */}
-      {walking && current ? (
-        <div className="af-enter absolute inset-x-3 bottom-4 mx-auto flex max-w-[620px] items-center gap-3 rounded-2xl bg-ink/90 p-2 pl-5 text-paper shadow-[var(--shadow-pop)] backdrop-blur" aria-live="polite">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper/55">
-              {floorName(current.floor)} · {tour! + 1} of {tourRooms.length}
-            </span>
-            <span className="truncate text-[15px]">
-              {current.name} <span className="text-paper/60">· {fmtFt(current.w)} × {fmtFt(current.d)}</span>
-            </span>
-          </div>
-          <button type="button" aria-label="Previous room" onClick={() => setTour((i) => Math.max(0, (i ?? 0) - 1))} className="flex size-9 items-center justify-center rounded-xl hover:bg-white/10">
-            <CaretLeft size={16} />
-          </button>
-          <button type="button" aria-label={paused ? "Resume tour" : "Pause tour"} onClick={() => setPaused((p) => !p)} className="flex size-9 items-center justify-center rounded-xl hover:bg-white/10">
-            {paused ? <Play size={16} weight="fill" /> : <Pause size={16} weight="fill" />}
-          </button>
-          <button type="button" aria-label="Next room" onClick={() => setTour((i) => Math.min(tourRooms.length, (i ?? 0) + 1))} className="flex size-9 items-center justify-center rounded-xl hover:bg-white/10">
-            <CaretRight size={16} />
-          </button>
-          <span className="absolute inset-x-5 bottom-0 h-[2px] overflow-hidden rounded-full bg-white/10">
-            <span key={`${tour}-${paused}`} className="block h-full origin-left bg-paper/70" style={{ animation: paused ? "none" : `af-progress ${TOUR_MS}ms linear forwards` }} />
-          </span>
-        </div>
-      ) : null}
+      {walking && tour ? <Walkthrough scene={scene} design={design} tour={tour} ended={ended} onExit={endTour} /> : null}
     </div>
   );
 }

@@ -2,19 +2,27 @@
 
 import * as React from "react";
 import * as THREE from "three";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { CameraControls } from "@react-three/drei";
-import { Bloom, EffectComposer, N8AO, SMAA, ToneMapping } from "@react-three/postprocessing";
+import { Bloom, BrightnessContrast, EffectComposer, HueSaturation, N8AO, SMAA, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
 import type { Brief, Design, Room } from "@/lib/types";
 import { HouseModel, PLINTH, toWorld } from "./HouseModel";
-import { Lights, Site, sunAt } from "./Site";
+import { Lights, NightSky, Site, sunAt } from "./Site";
+import { buildTour, dirOf, poseOfCamera, type Tour } from "./tour";
 
 export type CameraPreset = "iso" | "aerial" | "front" | "side" | "back" | "top";
+export type { Tour, TourChapter } from "./tour";
 
 export interface SceneHandle {
   view(preset: CameraPreset, animate?: boolean): void;
   focusRoom(room: Room, animate?: boolean): void;
+  /** Build and start the cinematic walkthrough from the current camera. */
+  startTour(): Tour | null;
+  stopTour(): void;
+  playTour(playing: boolean): void;
+  seekTour(t: number): void;
+  tourTime(): number;
 }
 
 interface Props {
@@ -31,9 +39,13 @@ interface Props {
   className?: string;
   onReady?: () => void;
   autoRotate?: boolean;
+  /** Called when the walkthrough reaches its last frame. */
+  onTourEnd?: () => void;
 }
 
 export { sunAt };
+
+const FOV = 34;
 
 function bounds(brief: Brief, design: Design) {
   const fp = design.footprint;
@@ -60,16 +72,53 @@ function poseFor(preset: CameraPreset, brief: Brief, design: Design, aspect = 1.
   return [target.clone().add(d), target];
 }
 
-const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design; intro: boolean; autoRotate: boolean }>(function Controller({ brief, design, intro, autoRotate }, ref) {
+interface TourState {
+  tour: Tour | null;
+  t: number;
+  playing: boolean;
+  /** Look offset from dragging, eased back to the path while playing. */
+  look: { yaw: number; pitch: number };
+  idle: number;
+  cur: { yaw: number; pitch: number; fov: number };
+  snap: boolean;
+}
+
+const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design; intro: boolean; autoRotate: boolean; onTouring: (on: boolean) => void; onTourEnd?: () => void }>(function Controller({ brief, design, intro, autoRotate, onTouring, onTourEnd }, ref) {
   const controls = React.useRef<CameraControls>(null);
-  const { invalidate, size } = useThree();
+  const { invalidate, size, gl } = useThree();
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const aspect = size.width / Math.max(1, size.height);
   const levelZ = (floor: number) => PLINTH + floor * design.floorHeight;
+  const tour = React.useRef<TourState>({ tour: null, t: 0, playing: false, look: { yaw: 0, pitch: 0 }, idle: 0, cur: { yaw: 0, pitch: 0, fov: FOV }, snap: true });
+  const endRef = React.useRef(onTourEnd);
+  endRef.current = onTourEnd;
+
+  const release = () => {
+    const c = controls.current;
+    const s = tour.current;
+    if (!s.tour) return;
+    s.tour = null;
+    s.playing = false;
+    camera.fov = FOV;
+    camera.updateProjectionMatrix();
+    if (c) {
+      c.enabled = true;
+      const d = new THREE.Vector3();
+      camera.getWorldDirection(d);
+      const p = camera.position;
+      // Hand the pose back to the orbit controls, looking at a point ahead.
+      const reach = Math.max(8, p.y * 0.8);
+      void c.setLookAt(p.x, p.y, p.z, p.x + d.x * reach, p.y + d.y * reach, p.z + d.z * reach, false);
+    }
+    onTouring(false);
+    invalidate();
+  };
 
   React.useImperativeHandle(ref, () => ({
     view(preset, animate = true) {
       const c = controls.current;
       if (!c) return;
+      if (tour.current.tour) release();
       const [p, t] = poseFor(preset, brief, design, aspect);
       c.minDistance = 4;
       void c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, animate);
@@ -78,6 +127,7 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
     focusRoom(room, animate = true) {
       const c = controls.current;
       if (!c) return;
+      if (tour.current.tour) release();
       const fp = design.footprint;
       const f = { cx: fp.x + fp.w / 2, cy: fp.y + fp.d / 2 };
       const z = levelZ(room.floor);
@@ -88,7 +138,111 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
       void c.setLookAt(eye.x, eye.y, eye.z, look.x, look.y, look.z, animate);
       invalidate();
     },
+    startTour() {
+      const c = controls.current;
+      if (!c) return null;
+      c.stop?.();
+      const start = poseOfCamera(camera);
+      const built = buildTour(brief, design, start, aspect);
+      const s = tour.current;
+      Object.assign(s, { tour: built, t: 0, playing: true, look: { yaw: 0, pitch: 0 }, idle: 0, cur: { yaw: start.yaw, pitch: start.pitch, fov: start.fov }, snap: true });
+      c.enabled = false;
+      onTouring(true);
+      return built;
+    },
+    stopTour: release,
+    playTour(playing) {
+      const s = tour.current;
+      if (!s.tour) return;
+      if (playing && s.t >= s.tour.duration) s.t = 0;
+      s.playing = playing;
+    },
+    seekTour(t) {
+      const s = tour.current;
+      if (!s.tour) return;
+      s.t = THREE.MathUtils.clamp(t, 0, s.tour.duration);
+      s.snap = true;
+      s.look = { yaw: 0, pitch: 0 };
+    },
+    tourTime: () => tour.current.t,
   }));
+
+  // Drag to look around, in any direction, while the walkthrough plays or is paused.
+  React.useEffect(() => {
+    const el = gl.domElement;
+    let drag: { x: number; y: number; id: number } | null = null;
+    const down = (e: PointerEvent) => {
+      if (!tour.current.tour) return;
+      drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      el.setPointerCapture?.(e.pointerId);
+    };
+    const move = (e: PointerEvent) => {
+      const s = tour.current;
+      if (!drag || !s.tour || e.pointerId !== drag.id) return;
+      const k = (camera.fov / 60) * 0.0055;
+      s.look.yaw += (e.clientX - drag.x) * k;
+      s.look.pitch = THREE.MathUtils.clamp(s.look.pitch + (e.clientY - drag.y) * k * 0.8, -1.1, 1.1);
+      s.idle = 0;
+      drag = { ...drag, x: e.clientX, y: e.clientY };
+    };
+    const up = () => {
+      drag = null;
+    };
+    const wheel = (e: WheelEvent) => {
+      const s = tour.current;
+      if (!s.tour) return;
+      e.preventDefault();
+      s.cur.fov = THREE.MathUtils.clamp(s.cur.fov + e.deltaY * 0.02, 24, 90);
+    };
+    el.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      el.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      el.removeEventListener("wheel", wheel);
+    };
+  }, [gl, camera]);
+
+  // The walkthrough drives the camera after the orbit controls have updated.
+  const pose = React.useMemo(() => ({ p: new THREE.Vector3(), yaw: 0, pitch: 0, fov: FOV }), []);
+  const ahead = React.useMemo(() => new THREE.Vector3(), []);
+  useFrame((_, delta) => {
+    const s = tour.current;
+    if (!s.tour) return;
+    const dt = Math.min(delta, 0.1);
+    if (s.playing) {
+      s.t += dt;
+      if (s.t >= s.tour.duration) {
+        s.t = s.tour.duration;
+        s.playing = false;
+        endRef.current?.();
+      }
+    }
+    s.tour.at(s.t, pose);
+    // Smooth heading and lens a touch; snap after a seek.
+    const k = s.snap ? 1 : 1 - Math.exp(-dt / 0.16);
+    s.cur.yaw += (pose.yaw - s.cur.yaw) * k;
+    s.cur.pitch += (pose.pitch - s.cur.pitch) * k;
+    s.cur.fov += (pose.fov - s.cur.fov) * (s.snap ? 1 : 1 - Math.exp(-dt / 0.6));
+    s.snap = false;
+    // Let go of a drag and the view eases back onto the path.
+    s.idle += dt;
+    if (s.playing && s.idle > 1.6) {
+      const e = Math.exp(-dt * 1.4);
+      s.look.yaw *= e;
+      s.look.pitch *= e;
+    }
+    camera.position.copy(pose.p);
+    dirOf(s.cur.yaw + s.look.yaw, THREE.MathUtils.clamp(s.cur.pitch + s.look.pitch, -1.35, 1.35), ahead);
+    camera.lookAt(ahead.add(pose.p));
+    if (Math.abs(camera.fov - s.cur.fov) > 0.01) {
+      camera.fov = s.cur.fov;
+      camera.updateProjectionMatrix();
+    }
+  });
 
   // Intro: from the isometric angle of the figure, ease into an aerial view.
   React.useEffect(() => {
@@ -114,7 +268,7 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
     if (!c || !autoRotate) return;
     let frame = 0;
     const spin = () => {
-      c.azimuthAngle += 0.0016;
+      if (!tour.current.tour) c.azimuthAngle += 0.0016;
       frame = requestAnimationFrame(spin);
     };
     frame = requestAnimationFrame(spin);
@@ -130,18 +284,20 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
 });
 
 export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseScene(
-  { brief, design, maxFloor, cutaway = false, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, intro = false, className, onReady, autoRotate = false },
+  { brief, design, maxFloor, cutaway = false, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, intro = false, className, onReady, autoRotate = false, onTourEnd },
   ref,
 ) {
   const hour = design.lighting.hour;
-  const { night } = sunAt(hour);
+  const { night, golden } = sunAt(hour);
   const lit = night || design.lighting.interior;
+  const [touring, setTouring] = React.useState(false);
+  const bg = night ? "#0d1320" : "#e9e5dc";
   return (
     <div className={className}>
       <Canvas
         shadows
         dpr={[1, 1.5]}
-        camera={{ fov: 34, near: 0.1, far: 2000, position: [80, 60, 80] }}
+        camera={{ fov: FOV, near: 0.1, far: 2400, position: [80, 60, 80] }}
         gl={{ antialias: false, stencil: false, powerPreference: "high-performance" }}
         onCreated={({ gl }) => {
           // Tone mapping happens in the effect chain below.
@@ -153,28 +309,35 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
           onSelectFurniture?.(null);
         }}
       >
-        <color attach="background" args={[night ? "#1c2026" : "#e9e5dc"]} />
-        <fog attach="fog" args={[night ? "#1c2026" : "#e9e5dc", 220, 620]} />
+        <color attach="background" args={[bg]} />
+        <fog attach="fog" args={[night ? "#121a29" : "#e9e5dc", night ? 180 : 220, night ? 700 : 620]} />
         <Lights hour={hour} night={night} />
-        <Site brief={brief} design={design} lit={lit} />
+        {night ? <NightSky /> : null}
+        <Site brief={brief} design={design} lit={lit} night={night} />
         <HouseModel
           brief={brief}
           design={design}
-          maxFloor={maxFloor ?? brief.floors - 1}
-          cutaway={cutaway}
-          selectedRoom={selectedRoom}
+          maxFloor={touring ? brief.floors - 1 : (maxFloor ?? brief.floors - 1)}
+          cutaway={touring ? false : cutaway}
+          selectedRoom={touring ? null : selectedRoom}
           selectedFurniture={selectedFurniture}
           onSelectRoom={onSelectRoom}
           onSelectFurniture={onSelectFurniture}
           lit={lit}
+          night={night}
+          entryOpen={touring}
         />
         <EffectComposer multisampling={0} enableNormalPass={false}>
-          <N8AO aoRadius={3} distanceFalloff={1.2} intensity={night ? 2 : 3.2} quality="medium" halfRes />
-          <Bloom luminanceThreshold={night ? 0.85 : 1.1} luminanceSmoothing={0.2} intensity={night ? 0.9 : 0.25} mipmapBlur />
+          <N8AO aoRadius={2.4} distanceFalloff={1} intensity={night ? 1.8 : 2.1} quality="medium" halfRes />
+          <Bloom luminanceThreshold={night ? 0.7 : 1.05} luminanceSmoothing={0.25} intensity={night ? 1.25 : 0.3} radius={0.8} mipmapBlur />
           <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          {/* A light grade toward a rendered-photo look: warmer, slightly richer. */}
+          <HueSaturation saturation={night ? 0.06 : golden ? 0.12 : 0.1} hue={0} />
+          <BrightnessContrast brightness={night ? 0 : 0.015} contrast={night ? 0.08 : 0.07} />
+          <Vignette offset={0.32} darkness={night ? 0.62 : 0.38} eskil={false} />
           <SMAA />
         </EffectComposer>
-        <Controller ref={ref} brief={brief} design={design} intro={intro} autoRotate={autoRotate} />
+        <Controller ref={ref} brief={brief} design={design} intro={intro} autoRotate={autoRotate} onTouring={setTouring} onTourEnd={onTourEnd} />
       </Canvas>
     </div>
   );

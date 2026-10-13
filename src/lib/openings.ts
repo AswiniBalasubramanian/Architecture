@@ -97,6 +97,16 @@ export function openingsOf(design: Design, floor: number): Opening[] {
   return out;
 }
 
+/** The straight flight inside a stair room, rising toward the back (+y). Shared by the model and the walkthrough. */
+export function flightOf(room: Room, rise: number) {
+  const steps = Math.max(10, Math.round(rise / 0.6));
+  const width = Math.min(room.w - 1.2, 3.6);
+  const run = (room.d - 2.5) / steps;
+  const x0 = room.x + 0.6;
+  const y0 = room.y + 0.6;
+  return { steps, width, run, x0, x1: x0 + width, y0, y1: y0 + steps * run };
+}
+
 export interface Partition {
   /** Plan endpoints, axis-aligned. */
   x0: number;

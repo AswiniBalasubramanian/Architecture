@@ -9,7 +9,8 @@ import { FloorPlan } from "@/components/plan/FloorPlan";
 import { ProjectMissing, ProjectSkeleton, useProject } from "@/components/ProjectGate";
 import { Properties } from "@/components/studio/Properties";
 import { UserMenu } from "@/components/AuthGate";
-import type { CameraPreset, SceneHandle } from "@/components/three/HouseScene";
+import type { CameraPreset, SceneHandle, Tour } from "@/components/three/HouseScene";
+import { Walkthrough } from "@/components/Walkthrough";
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
 import { Button, IconButton, Kbd, Logo, Segmented } from "@/components/ui/kit";
 import { DIRECTIONS, ROOM_TYPES, floorName } from "@/lib/catalog";
@@ -85,7 +86,8 @@ export default function StudioPage() {
   const [sharing, setSharing] = React.useState(false);
   const [gl, setGl] = React.useState(true);
   const [toast, setToast] = React.useState<string | null>(null);
-  const [tour, setTour] = React.useState<number | null>(null);
+  const [tour, setTour] = React.useState<Tour | null>(null);
+  const [ended, setEnded] = React.useState(false);
 
   React.useEffect(() => setGl(webglAvailable()), []);
 
@@ -130,7 +132,6 @@ export default function StudioPage() {
         st.rotateFurniture(st.selection.furnitureId);
       } else if (e.key === "Escape") {
         st.select({ roomId: null, furnitureId: null });
-        setTour(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -148,24 +149,16 @@ export default function StudioPage() {
 
   const design = s.design;
   const project = s.project;
-  const tourRooms = React.useMemo(() => (design ? design.rooms.filter((r) => ROOM_TYPES[r.type].habitable || r.type === "foyer" || r.type === "court") : []), [design]);
-
-  // Walkthrough: step through rooms, three-and-a-half seconds each.
-  React.useEffect(() => {
-    if (tour === null || !design) return;
-    const room = tourRooms[tour];
-    if (!room) {
-      setTour(null);
-      scene.current?.view("aerial");
-      return;
-    }
-    s.setFloor(room.floor);
-    s.select({ roomId: room.id, furnitureId: null });
-    scene.current?.focusRoom(room);
-    const t = window.setTimeout(() => setTour((i) => (i === null ? null : i + 1)), 3600);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tour]);
+  // Cinematic walkthrough: the camera path lives in the scene; this holds the player.
+  const startTour = () => {
+    s.select({ roomId: null, furnitureId: null });
+    setEnded(false);
+    setTour(scene.current?.startTour() ?? null);
+  };
+  const endTour = () => {
+    scene.current?.stopTour();
+    setTour(null);
+  };
 
   if (status === "loading" || (status === "ready" && !design)) return <ProjectSkeleton />;
   if (status === "missing" || !project || !design) return <ProjectMissing />;
@@ -329,6 +322,7 @@ export default function StudioPage() {
                     onSelectRoom={(rid) => (rid ? selectRoom(rid) : s.select({ roomId: null, furnitureId: null }))}
                     onSelectFurniture={(fid) => fid && selectFurniture(fid)}
                     className="absolute inset-0"
+                    onTourEnd={() => setEnded(true)}
                   />
                   <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1 rounded-xl border border-line bg-card/95 p-1 shadow-[var(--shadow-lift)] backdrop-blur">
                     {(["aerial", "front", "side", "top"] as CameraPreset[]).map((p) => (
@@ -341,22 +335,15 @@ export default function StudioPage() {
                       <Scissors size={15} />
                     </IconButton>
                     <IconButton
-                      label={walking ? "Stop walkthrough" : "Walk through the rooms"}
+                      label={walking ? "Stop walkthrough" : "Cinematic walkthrough"}
                       active={walking}
-                      onClick={() => {
-                        if (walking) {
-                          setTour(null);
-                          scene.current?.view("aerial");
-                        } else setTour(0);
-                      }}
+                      onClick={() => (walking ? endTour() : startTour())}
                     >
                       <PersonSimpleWalk size={15} />
                     </IconButton>
                   </div>
-                  {walking && tourRooms[tour!] ? (
-                    <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-ink/85 px-4 py-2 text-[13px] text-paper backdrop-blur" aria-live="polite">
-                      {tourRooms[tour!]!.name} · {floorName(tourRooms[tour!]!.floor)} <span className="font-mono text-[11px] text-paper/60">{tour! + 1}/{tourRooms.length}</span>
-                    </div>
+                  {walking && tour ? (
+                    <Walkthrough scene={scene} design={design} tour={tour} ended={ended} onExit={endTour} />
                   ) : (
                     <p className="pointer-events-none absolute bottom-3 right-3 hidden rounded-full bg-card/90 px-3 py-1 font-mono text-[10px] text-muted md:block">Click a floor to select a room · drag to orbit</p>
                   )}

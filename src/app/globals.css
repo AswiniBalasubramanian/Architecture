@@ -118,8 +118,35 @@ body {
   animation: af-fade-up 520ms var(--ease-out-soft) both;
 }
 
+/* Walkthrough: chapter titles rise and sharpen in; the frame fades up. */
+@keyframes af-caption-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes af-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.af-caption {
+  animation: af-caption-in 900ms var(--ease-out-soft) both;
+}
+.af-fade {
+  animation: af-fade-in 900ms ease both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .af-enter {
+  .af-enter,
+  .af-caption,
+  .af-fade {
     animation: none;
   }
 }

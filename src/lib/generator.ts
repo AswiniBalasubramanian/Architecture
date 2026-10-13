@@ -359,8 +359,8 @@ export function furnish(room: Room): Furniture[] {
 }
 
 const DIRECTION_TEMPLATES: Record<DirectionId, { exterior: string; interior: string }> = {
-  open: { exterior: "board-concrete", interior: "warm-minimal" },
-  core: { exterior: "white-stone", interior: "japandi" },
+  open: { exterior: "elite-white", interior: "warm-minimal" },
+  core: { exterior: "elite-white", interior: "japandi" },
   courtyard: { exterior: "lime-teak", interior: "classic-teak" },
 };
 

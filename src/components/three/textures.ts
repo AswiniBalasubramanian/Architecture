@@ -43,14 +43,14 @@ const BUMP: Partial<Record<SurfaceId, number>> = {
   tile: 0.03,
   terracotta: 0.12,
   metal: 0.05,
-  plaster: 0.02,
+  plaster: 0,
   marble: 0.008,
   grass: 0.06,
   asphalt: 0.03,
   paving: 0.06,
   gravel: 0.07,
   fabric: 0.02,
-  lacquer: 0.004,
+  lacquer: 0,
   soil: 0.05,
 };
 
@@ -115,20 +115,21 @@ function draw(material: SurfaceId, color: string, g: CanvasRenderingContext2D, h
   switch (material) {
     case "plaster":
     case "lacquer": {
-      // Trowel clouds, then fine sand.
-      for (let i = 0; i < 70; i++) {
+      // A fresh, smooth paint finish: the faintest roller variation and a fine
+      // eggshell grain. No blotches or grit, so new walls read as new.
+      for (let i = 0; i < 24; i++) {
         const x = r() * SIZE;
         const y = r() * SIZE;
-        const rad = 30 + r() * 90;
+        const rad = 120 + r() * 160;
         const grad = g.createRadialGradient(x, y, 0, x, y, rad);
-        grad.addColorStop(0, p.surf((r() - 0.5) * (material === "plaster" ? 0.07 : 0.03)));
+        grad.addColorStop(0, p.surf((r() - 0.5) * 0.012));
         grad.addColorStop(1, "rgba(0,0,0,0)");
-        g.globalAlpha = 0.5;
+        g.globalAlpha = 0.35;
         g.fillStyle = grad;
         g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
       }
       g.globalAlpha = 1;
-      noise(g, r, material === "plaster" ? 9000 : 2500, 1.3, 0.35, () => p.surf((r() - 0.5) * 0.12));
+      noise(g, r, 2200, 1, 0.12, () => p.surf((r() - 0.5) * 0.025));
       break;
     }
     case "concrete": {
@@ -427,7 +428,9 @@ export function surfaceMaterial(material: SurfaceId, color: string, width = 1, h
   const hit = materialCache.get(key);
   if (hit) return hit;
   const spec = material in MATERIALS ? MATERIALS[material as MaterialId] : { roughness: 0.95, metalness: 0 };
-  const set = texturesFor(material, color);
+  // Painted render and lacquer are flat satin colour: crisp and new, no texture.
+  const painted = material === "plaster" || material === "lacquer";
+  const set = painted ? null : texturesFor(material, color);
   let map: THREE.Texture | null = null;
   let bump: THREE.Texture | null = null;
   if (set) {
@@ -441,9 +444,10 @@ export function surfaceMaterial(material: SurfaceId, color: string, width = 1, h
   const mat = new THREE.MeshStandardMaterial({
     color: map ? "#ffffff" : color,
     map,
-    bumpMap: bump,
+    // Painted surfaces get no relief: a magnified bump map reads as ripples.
+    bumpMap: (BUMP[material] ?? 0.02) > 0 ? bump : null,
     bumpScale: BUMP[material] ?? 0.02,
-    roughness: spec.roughness,
+    roughness: painted ? (material === "plaster" ? 0.72 : 0.45) : spec.roughness,
     metalness: spec.metalness,
     ...extra,
   });

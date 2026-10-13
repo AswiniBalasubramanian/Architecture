@@ -51,7 +51,7 @@ export const ROOM_TYPES: Record<RoomType, { label: string; tint: string; habitab
 };
 
 export const MATERIALS: Record<MaterialId, { label: string; color: string; roughness: number; metalness: number }> = {
-  plaster: { label: "Lime plaster", color: "#ece6da", roughness: 0.92, metalness: 0 },
+  plaster: { label: "Smooth render", color: "#ece6da", roughness: 0.8, metalness: 0 },
   brick: { label: "Exposed brick", color: "#a65d44", roughness: 0.9, metalness: 0 },
   stone: { label: "Natural stone", color: "#b9ae9c", roughness: 0.85, metalness: 0 },
   concrete: { label: "Board-formed concrete", color: "#a9a7a1", roughness: 0.88, metalness: 0 },
@@ -82,6 +82,12 @@ export const SWATCHES = ["#f1ece2", "#e6dccb", "#cfc3ae", "#b9ae9c", "#a9a7a1", 
 type Templ = { id: string; label: string; blurb: string; set: Partial<Record<MaterialSlot, MaterialChoice>> };
 
 export const EXTERIOR_TEMPLATES: Templ[] = [
+  {
+    id: "elite-white",
+    label: "Elite White",
+    blurb: "Crisp white render, teak cladding, charcoal frames",
+    set: { exterior: { material: "plaster", color: "#f6f4ef" }, accent: { material: "wood", color: "#9a6a43" }, roof: { material: "concrete", color: "#d8d5ce" }, frames: { material: "metal", color: "#2e3130" } },
+  },
   {
     id: "lime-teak",
     label: "Lime & Teak",
