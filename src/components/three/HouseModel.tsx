@@ -8,6 +8,7 @@ import { flightOf, openingsOf, partitionsOf, type Opening, type Side } from "@/l
 import type { Brief, Design, Furniture, MaterialChoice, Room } from "@/lib/types";
 import { materialFor, surfaceMaterial, textureFor, TILE } from "./textures";
 import { Facade } from "./Facade";
+import { PremiumFurniture, RoomCeiling, useInteriorMaterials } from "./Interior";
 
 export const PLINTH = 2;
 export const SLAB = 0.6;
@@ -101,7 +102,7 @@ function solarTexture() {
 }
 let solarMap: THREE.Texture | null = null;
 
-function useMaterials(design: Design, lit: boolean): MaterialsSet {
+function useMaterials(design: Design, lit: boolean, night = lit): MaterialsSet {
   const m = design.materials;
   return React.useMemo(() => {
     const glass = new THREE.MeshPhysicalMaterial({ color: "#a9bfc0", roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.34, envMapIntensity: 1, depthWrite: false });
@@ -118,7 +119,8 @@ function useMaterials(design: Design, lit: boolean): MaterialsSet {
       fabricSoft: new THREE.MeshStandardMaterial({ color: new THREE.Color(m.furniture.color).lerp(new THREE.Color("#ffffff"), 0.55), roughness: 1 }),
       wood: materialFor({ material: "wood", color: "#a77a4f" }, 4, 4),
       stone: materialFor({ material: "marble", color: "#e8e3da" }, 4, 4),
-      glass: lit ? glow : glass,
+      // Windows glow from outside only after dark.
+      glass: lit && night ? glow : glass,
       glow,
       dark: new THREE.MeshStandardMaterial({ color: "#2c2e2d", roughness: 0.5 }),
       slab: new THREE.MeshStandardMaterial({ color: "#e9e4da", roughness: 0.9 }),
@@ -141,7 +143,7 @@ function useMaterials(design: Design, lit: boolean): MaterialsSet {
       solar: new THREE.MeshPhysicalMaterial({ map: (solarMap ??= solarTexture()), roughness: 0.18, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.05 }),
       shade: new THREE.MeshStandardMaterial({ color: "#efe8da", roughness: 0.6, side: THREE.DoubleSide, emissive: lit ? "#ffb35c" : "#000000", emissiveIntensity: lit ? 0.6 : 0 }),
     };
-  }, [m.exterior, m.accent, m.roof, m.frames, m.floor, m.walls, m.cabinets, m.furniture, lit]);
+  }, [m.exterior, m.accent, m.roof, m.frames, m.floor, m.walls, m.cabinets, m.furniture, lit, night]);
 }
 
 /* ------------------------------------------------------------- walls */
@@ -814,6 +816,44 @@ function Balustrade({ room, z0, rise, mats }: { room: Room; z0: number; rise: nu
   );
 }
 
+/**
+ * Is there solid wall behind a piece placed against one? Open-plan edges,
+ * doorways and windows are not, so feature panels and art are left off there.
+ */
+function wallBehind(design: Design, item: Furniture): "exterior" | "partition" | null {
+  const spec = FURNITURE[item.kind];
+  const t = (item.rot * Math.PI) / 180;
+  const dx = -Math.sin(t);
+  const dy = Math.cos(t);
+  const reach = spec.d / 2 + 0.4;
+  const px = item.x + dx * (reach + 0.3);
+  const py = item.y + dy * (reach + 0.3);
+  const half = spec.w / 2 + 1.6;
+  const lo = (horiz: boolean) => (horiz ? item.x - half : item.y - half);
+  const hi = (horiz: boolean) => (horiz ? item.x + half : item.y + half);
+  const horiz = Math.abs(dy) > 0.5;
+  const inside = design.rooms.find((r) => r.floor === item.floor && px > r.x && px < r.x + r.w && py > r.y && py < r.y + r.d);
+  if (!inside) {
+    const side: Side = horiz ? (dy > 0 ? "back" : "front") : dx > 0 ? "right" : "left";
+    return openingsOf(design, item.floor).some((o) => o.side === side && o.b > lo(horiz) && o.a < hi(horiz)) ? null : "exterior";
+  }
+  const wx = item.x + dx * reach;
+  const wy = item.y + dy * reach;
+  const solid = partitionsOf(design, item.floor).some((p) => {
+    const pH = Math.abs(p.y1 - p.y0) < 0.01;
+    if (pH !== horiz) return false;
+    const near = pH ? Math.abs(p.y0 - wy) < 0.8 : Math.abs(p.x0 - wx) < 0.8;
+    const a0 = pH ? Math.min(p.x0, p.x1) : Math.min(p.y0, p.y1);
+    const a1 = pH ? Math.max(p.x0, p.x1) : Math.max(p.y0, p.y1);
+    if (!near || a0 > lo(horiz) + 1.2 || a1 < hi(horiz) - 1.2 || p.glass) return false;
+    if (!p.door) return true;
+    const g0 = a0 + p.door[0];
+    const g1 = a0 + p.door[1];
+    return !(g1 > lo(horiz) && g0 < hi(horiz));
+  });
+  return solid ? "partition" : null;
+}
+
 /** A room's slab or floor, with the stairwell over the flight left open. */
 function piecesOf(r: Room, well: boolean, rise: number): Array<[number, number, number, number]> {
   if (!well) return [[r.x, r.x + r.w, r.y, r.y + r.d]];
@@ -845,7 +885,7 @@ function Pendants({ rooms, z, lit, mats }: { rooms: Room[]; z: number; lit: bool
   return (
     <>
       {rooms
-        .filter((r) => ["living", "dining", "bedroom", "master", "family", "kitchen", "study", "foyer"].includes(r.type))
+        .filter((r) => ["dining", "foyer"].includes(r.type))
         .map((r) => {
           const cx = r.x + r.w / 2;
           const cy = r.y + r.d / 2;
@@ -889,7 +929,8 @@ export interface HouseModelProps {
 export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, lit, night = false, entryOpen = false }: HouseModelProps) {
   const fp = design.footprint;
   const frame = React.useMemo(() => ({ cx: fp.x + fp.w / 2, cy: fp.y + fp.d / 2 }), [fp]);
-  const mats = useMaterials(design, lit);
+  const mats = useMaterials(design, lit, night);
+  const im = useInteriorMaterials(design, lit);
   const FH = design.floorHeight;
   const floors = brief.floors;
   const level = (f: number) => PLINTH + f * FH;
@@ -963,13 +1004,24 @@ export function HouseModel({ brief, design, maxFloor, cutaway, selectedRoom, sel
                   </React.Fragment>
                 ))}
               {/* Pendant lights hang from the ceiling, except on a floor cut open in section. */}
-              {cutAt >= wallTop ? <Pendants rooms={rooms} z={wallTop} lit={lit} mats={mats} /> : null}
+              {cutAt >= wallTop ? (
+                <>
+                  <Pendants rooms={rooms} z={wallTop} lit={lit} mats={mats} />
+                  {rooms.map((r) => (
+                    <RoomCeiling key={`ceil${r.id}`} room={r} top={wallTop} im={im} />
+                  ))}
+                </>
+              ) : null}
               {/* Ceiling of the top visible floor when not cut. */}
               <group position={[0, z0, 0]}>
                 {design.furniture
                   .filter((item) => item.floor === f)
                   .map((item) => (
-                    <FurnitureMesh key={item.id} item={item} mats={mats} selected={selectedFurniture === item.id} onSelect={onSelectFurniture ? (id) => onSelectFurniture(id) : undefined} />
+                    item.kind === "car" ? (
+                      <FurnitureMesh key={item.id} item={item} mats={mats} selected={selectedFurniture === item.id} onSelect={onSelectFurniture ? (id) => onSelectFurniture(id) : undefined} />
+                    ) : (
+                      <PremiumFurniture key={item.id} item={item} mats={mats} im={im} wall={wallBehind(design, item)} selected={selectedFurniture === item.id} onSelect={onSelectFurniture ? (id) => onSelectFurniture(id) : undefined} />
+                    )
                   ))}
               </group>
             </group>

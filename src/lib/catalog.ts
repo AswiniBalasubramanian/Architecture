@@ -55,7 +55,7 @@ export const MATERIALS: Record<MaterialId, { label: string; color: string; rough
   brick: { label: "Exposed brick", color: "#a65d44", roughness: 0.9, metalness: 0 },
   stone: { label: "Natural stone", color: "#b9ae9c", roughness: 0.85, metalness: 0 },
   concrete: { label: "Board-formed concrete", color: "#a9a7a1", roughness: 0.88, metalness: 0 },
-  wood: { label: "Timber", color: "#a77a4f", roughness: 0.7, metalness: 0 },
+  wood: { label: "Timber", color: "#a77a4f", roughness: 0.55, metalness: 0 },
   tile: { label: "Ceramic tile", color: "#d8d2c6", roughness: 0.4, metalness: 0 },
   terracotta: { label: "Terracotta tile", color: "#b5643f", roughness: 0.8, metalness: 0 },
   metal: { label: "Standing-seam metal", color: "#4b4f4e", roughness: 0.45, metalness: 0.6 },

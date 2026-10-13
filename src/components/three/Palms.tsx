@@ -171,3 +171,33 @@ export function Palm({ position, height = 26, seed = 1, kind = "coconut" }: { po
     </group>
   );
 }
+
+/** An indoor palm in a ceramic planter. */
+export function PottedPalm({ pot }: { pot: THREE.Material }) {
+  const frond = React.useMemo(() => frondGeometry(2.6, 1.3), []);
+  const mat = React.useMemo(() => new THREE.MeshStandardMaterial({ map: frondTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.7, color: "#d6e8b0" }), []);
+  const stems = React.useMemo(() => {
+    const r = rnd(11);
+    return Array.from({ length: 9 }, (_, i) => ({ yaw: (i / 9) * Math.PI * 2 + r() * 0.4, tilt: 0.35 + r() * 0.6, h: 2.2 + r() * 1.6, s: 0.75 + r() * 0.4 }));
+  }, []);
+  return (
+    <group>
+      <mesh position={[0, 0.85, 0]} material={pot} castShadow receiveShadow>
+        <cylinderGeometry args={[0.72, 0.55, 1.7, 28]} />
+      </mesh>
+      <mesh position={[0, 1.66, 0]}>
+        <cylinderGeometry args={[0.66, 0.66, 0.04, 20]} />
+        <meshStandardMaterial color="#3b2f25" roughness={1} />
+      </mesh>
+      {stems.map((st, i) => (
+        <group key={i} position={[0, 1.6, 0]} rotation={[0, st.yaw, 0]}>
+          <mesh position={[0.05, st.h / 2, 0]} castShadow>
+            <cylinderGeometry args={[0.025, 0.035, st.h, 5]} />
+            <meshStandardMaterial color="#6f7d3c" roughness={0.8} />
+          </mesh>
+          <mesh geometry={frond} material={mat} position={[0.05, st.h, 0]} rotation={[0, 0, st.tilt]} scale={st.s} castShadow />
+        </group>
+      ))}
+    </group>
+  );
+}

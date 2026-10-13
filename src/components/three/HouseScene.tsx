@@ -289,8 +289,9 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
 ) {
   const hour = design.lighting.hour;
   const { night, golden } = sunAt(hour);
-  const lit = night || design.lighting.interior;
   const [touring, setTouring] = React.useState(false);
+  // Interiors are shown lit during the walkthrough, as they would be photographed.
+  const lit = night || design.lighting.interior || touring;
   const bg = night ? "#0d1320" : "#e9e5dc";
   return (
     <div className={className}>

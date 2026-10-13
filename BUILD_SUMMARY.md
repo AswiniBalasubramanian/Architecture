@@ -70,6 +70,13 @@ A web studio that turns a plot and a brief into an explorable home concept, then
 - Night: gradient sky, stars and moon, moonlight, warm interiors, wall-wash scallops, drive bollards, lantern glows, palm uplights
 - Light colour grade and vignette for a rendered-photo finish
 
+### Premium interiors
+- Rounded upholstered furniture on brass legs; channel-tufted headboards, layered bedding and accent cushions
+- Fluted timber feature walls behind beds and media units, only where there is solid wall (never over windows or doorways)
+- Marble dining, island and coffee tops; waterfall island with bar stools; chimney hood, brass tap, under-cabinet LED
+- Gypsum false ceilings with a warm cove line and recessed downlights; framed abstract art, woven rugs, indoor palms, styled shelves
+- Satin timber floors; interiors light up during the walkthrough as they would be photographed
+
 ### Studio
 - Exterior and interior schemes, per-surface materials and colours, per-room finishes and wall paint
 - Time-of-day slider, interior lights, furniture add / rotate / remove / re-furnish
