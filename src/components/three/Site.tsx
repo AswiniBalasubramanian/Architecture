@@ -6,7 +6,7 @@ import { Environment, Lightformer, Sky, Stars } from "@react-three/drei";
 import type { Brief, Design } from "@/lib/types";
 import { toWorld } from "./HouseModel";
 import { Spot, glowTexture } from "./Facade";
-import { ArecaClump, Palm } from "./Palms";
+import { Palm } from "./Palms";
 import { materialFor, surfaceMaterial } from "./textures";
 
 function rng(seed: number) {
@@ -85,32 +85,6 @@ function Instances({ frame, geometry, material, items, cast = true }: { frame: F
     mesh.computeBoundingSphere();
   }, [items, frame]);
   return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow={cast} receiveShadow />;
-}
-
-function Tree({ frame, x, y, s, seed, mats }: { frame: Frame; x: number; y: number; s: number; seed: number; mats: ReturnType<typeof useSiteMaterials> }) {
-  const r = rng(seed);
-  const p = toWorld(frame, x, y, 0);
-  const blobs = Array.from({ length: 16 }, () => ({
-    pos: [(r() - 0.5) * 6.5, 6.8 + r() * 4.6, (r() - 0.5) * 6.5] as [number, number, number],
-    rad: 1.3 + r() * 1.4,
-    m: r() < 0.33 ? mats.leafDark : r() < 0.5 ? mats.leafLight : mats.leaf,
-  }));
-  const branches = Array.from({ length: 3 }, (_, k) => ({ rot: (k / 3) * Math.PI * 2 + r(), tilt: 0.5 + r() * 0.3 }));
-  return (
-    <group position={p} scale={s} rotation={[0, r() * Math.PI * 2, 0]}>
-      <mesh position={[0, 3, 0]} material={mats.trunk} castShadow>
-        <cylinderGeometry args={[0.28, 0.5, 6, 10]} />
-      </mesh>
-      {branches.map((b, k) => (
-        <mesh key={k} position={[Math.cos(b.rot) * 0.9, 6.4, Math.sin(b.rot) * 0.9]} rotation={[Math.sin(b.rot) * b.tilt, 0, -Math.cos(b.rot) * b.tilt]} material={mats.trunk} castShadow>
-          <cylinderGeometry args={[0.1, 0.2, 2.6, 6]} />
-        </mesh>
-      ))}
-      {blobs.map((b, k) => (
-        <mesh key={k} position={b.pos} material={b.m} geometry={clumpGeometry(k + seed)} scale={b.rad} castShadow receiveShadow />
-      ))}
-    </group>
-  );
 }
 
 function useSiteMaterials(design: Design, lit: boolean, name = "") {
@@ -193,15 +167,6 @@ export function Site({ brief, design, lit, night = false }: { brief: Brief; desi
     [Math.max(2.5, fp.x * 0.45), Math.max(3, fp.y * 0.5), 24, 5],
     [Math.min(W - 2.5, W - (W - fp.x - fp.w) * 0.45), Math.max(3, fp.y * 0.6), 28, 9],
     [Math.max(3, fp.x * 0.5), fp.y + fp.d + Math.max(3, (D - fp.y - fp.d) * 0.5), 30, 3],
-    [-8, D * 0.55, 34, 21],
-    [W + 9, D * 0.25, 30, 27],
-    [W * 0.7, D + 12, 36, 33],
-  ];
-  const arecas: Array<[number, number, number]> = [
-    [Math.max(2, gate[0] - 4.5), 1.6, 2],
-    [Math.min(W - 2, gate[1] + 4.5), 1.6, 4],
-    [1.8, D - 2, 6],
-    [W - 1.8, D - 2, 8],
   ];
   const bollards = React.useMemo(() => {
     const out: Array<[number, number]> = [];
@@ -212,16 +177,6 @@ export function Site({ brief, design, lit, night = false }: { brief: Brief; desi
   const glowSprite = React.useMemo(() => new THREE.SpriteMaterial({ map: glowTexture(), color: "#ffc58a", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), []);
   // Street lamps along the far kerb.
   const lamps = [-30, 20, 70].map((x) => x + (W % 10));
-  const trees: Array<[number, number, number, number]> = [
-    [Math.max(3, fp.x * 0.5), fp.y + fp.d + Math.max(3, (D - fp.y - fp.d) * 0.5), 1.15, 3],
-    [Math.min(W - 3, fp.x + fp.w + Math.max(2, (W - fp.x - fp.w) * 0.5)), fp.y + fp.d + Math.max(3, (D - fp.y - fp.d) * 0.4), 0.95, 7],
-    [Math.max(3, fp.x * 0.45), Math.max(3, fp.y * 0.45), 0.85, 11],
-    [-10, D * 0.3, 1.4, 13],
-    [W + 11, D * 0.65, 1.3, 17],
-    [W * 0.3, D + 15, 1.5, 19],
-    [-14, -30, 1.3, 23],
-    [W + 18, -32, 1.2, 29],
-  ];
 
   return (
     <group>
@@ -289,16 +244,10 @@ export function Site({ brief, design, lit, night = false }: { brief: Brief; desi
           {lit ? <pointLight position={W3(x, -9, 14.6)} intensity={60} distance={40} decay={1.6} color="#ffcb84" /> : null}
         </group>
       ))}
-      {trees.map(([x, y, s, seed], i) =>
-        i === 2 || i === 0 ? null : <Tree key={i} frame={frame} x={x} y={y} s={s} seed={seed} mats={mats} />,
-      )}
-      {palms.map(([x, y, h, seed], i) => (
+            {palms.map(([x, y, h, seed], i) => (
         <Palm key={`palm${i}`} position={W3(x, y, 0)} height={h} seed={seed} />
       ))}
-      {arecas.map(([x, y, seed], i) => (
-        <ArecaClump key={`areca${i}`} position={W3(x, y, 0)} seed={seed} height={11} />
-      ))}
-      {night ? (
+            {night ? (
         <>
           {/* Bollards along the drive, each with a pool of light. */}
           {bollards.map(([x, y], i) => (

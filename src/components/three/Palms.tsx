@@ -171,16 +171,3 @@ export function Palm({ position, height = 26, seed = 1, kind = "coconut" }: { po
     </group>
   );
 }
-
-/** A clump of areca palms: several slim stems from one base. */
-export function ArecaClump({ position, seed = 1, height = 12 }: { position: THREE.Vector3; seed?: number; height?: number }) {
-  const r = rnd(seed);
-  const stems = Array.from({ length: 4 }, (_, i) => ({ dx: (r() - 0.5) * 1.6, dz: (r() - 0.5) * 1.6, h: height * (0.65 + r() * 0.45), s: seed * 10 + i }));
-  return (
-    <group position={position}>
-      {stems.map((s, i) => (
-        <Palm key={i} position={new THREE.Vector3(s.dx, 0, s.dz)} height={s.h} seed={s.s} kind="areca" />
-      ))}
-    </group>
-  );
-}
