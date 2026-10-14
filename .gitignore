@@ -9,3 +9,15 @@ shots
 
 .vercel
 .env*
+
+# product video
+video/node_modules
+video/captures
+video/renders
+video/.hyperframes
+video/.cache
+video/.bin
+
+# Remotion launch film
+video-remotion/node_modules
+video-remotion/out

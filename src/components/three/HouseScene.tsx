@@ -85,6 +85,12 @@ interface TourState {
   snap: boolean;
 }
 
+/** Development only: lets the product-video capture script step the camera frame by frame. */
+function expose(handle: SceneHandle): SceneHandle {
+  if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") (window as unknown as { __archformScene?: SceneHandle }).__archformScene = handle;
+  return handle;
+}
+
 const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design; intro: boolean; autoRotate: boolean; onTouring: (on: boolean) => void; onTourEnd?: () => void }>(function Controller({ brief, design, intro, autoRotate, onTouring, onTourEnd }, ref) {
   const controls = React.useRef<CameraControls>(null);
   const { invalidate, size, gl } = useThree();
@@ -116,7 +122,7 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
     invalidate();
   };
 
-  React.useImperativeHandle(ref, () => ({
+  React.useImperativeHandle(ref, () => expose({
     view(preset, animate = true) {
       const c = controls.current;
       if (!c) return;

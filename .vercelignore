@@ -4,3 +4,7 @@
 node_modules
 *.tsbuildinfo
 .env*.local
+video
+video-remotion
+*.mp4
+scripts
