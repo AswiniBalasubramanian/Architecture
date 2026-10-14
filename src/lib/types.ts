@@ -7,7 +7,10 @@ export type DirectionId = "open" | "core" | "courtyard";
 export type RoofType = "flat" | "gable" | "hip";
 export type Currency = "INR" | "USD" | "EUR" | "GBP" | "AED";
 
-export type Requirement = "parking" | "study" | "pooja" | "utility" | "garden" | "terrace" | "family";
+export type Requirement = "parking" | "study" | "pooja" | "utility" | "garden" | "terrace" | "family" | "vastu";
+
+/** The compass direction the plot's road frontage faces. */
+export type Facing = "north" | "east" | "south" | "west";
 
 export interface Brief {
   name: string;
@@ -25,6 +28,10 @@ export interface Brief {
   notes: string;
   /** Editable planning assumptions (ft). */
   assumptions: Assumptions;
+  /** Which way the road frontage faces (for Vastu and sun). Defaults to east. */
+  facing?: Facing;
+  /** Roof preference; "auto" follows the house type. */
+  roof?: RoofType | "auto";
 }
 
 export interface Assumptions {
@@ -64,6 +71,8 @@ export interface Room {
   finish?: MaterialChoice;
   /** Optional per-room wall paint. */
   wallColor?: string;
+  /** An en-suite bath: the id of the bedroom it opens from. */
+  attachedTo?: string;
 }
 
 export type FurnitureKind =
@@ -138,7 +147,20 @@ export interface Design {
   lighting: Lighting;
   exteriorTemplate: string;
   interiorTemplate: string;
+  /** Which layout variant of the direction this is (mirroring, band split and room order). */
+  variant?: number;
+  /** Architect overrides for exterior windows, keyed "roomId:side". */
+  windows?: Record<string, WindowOverride>;
+  /** Architect overrides for interior doors, keyed by the two room ids sorted and joined with "|". */
+  doors?: Record<string, DoorChoice>;
 }
+
+export interface WindowOverride {
+  /** Clear width in feet; 0 removes the window. */
+  width: number;
+}
+
+export type DoorChoice = "door" | "open" | "none";
 
 export interface Version {
   id: string;

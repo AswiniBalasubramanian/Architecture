@@ -12,7 +12,7 @@
 
 import * as THREE from "three";
 import { ROOM_TYPES, floorName } from "@/lib/catalog";
-import { flightOf, openingsOf, partitionsOf, type Opening } from "@/lib/openings";
+import { stairOf, openingsOf, partitionsOf, type Opening } from "@/lib/openings";
 import type { Brief, Design, Room } from "@/lib/types";
 
 const PLINTH = 2;
@@ -251,29 +251,23 @@ export function buildTour(brief: Brief, design: Design, start: Pose, aspect = 1.
       const path = stair && routes(links, cur!)(stair);
       if (!stair || !above || !path) break;
       follow(path);
-      const fl = flightOf(stair, FH);
-      const fx = (fl.x0 + fl.x1) / 2;
-      const sx = (fl.x1 + stair.x + stair.w) / 2;
-      const strip = stair.x + stair.w - fl.x1 > 1.4;
+      // A dog-leg: up flight 1 to the half-landing, turn, up flight 2 to the landing above.
+      const st = stairOf(stair, FH);
+      const ux = (st.up.x0 + st.up.x1) / 2;
+      const dx = (st.down.x0 + st.down.x1) / 2;
       const z0 = level(floor);
+      const halfZ = z0 + st.perFlight * st.riser;
+      const landY = (st.yTop + st.well.y1) / 2;
       chapter({ title: `Up to the ${floorName(floor + 1).toLowerCase()}`, detail: "Stair", kind: "stair" });
-      if (py > fl.y0 + 1.5 && strip) {
-        walk(V(sx, THREE.MathUtils.clamp(py, stair.y + 1, stair.y + stair.d - 1), z0 + EYE), 3);
-        walk(V(sx, stair.y + 0.35, z0 + EYE), 3);
-      }
-      // Climb looking up the flight and, as the landing opens up, toward it.
-      const side = strip ? 1 : 0;
-      walk(V(fx, stair.y + 0.3, z0 + EYE), 2.6, FOV_IN, { abs: Math.PI });
-      walk(V(fx, fl.y0 + 0.4, z0 + EYE + 0.2), 2.2, FOV_IN, { abs: Math.PI - 0.08 * side }, 0.22);
-      walk(V(fx, (fl.y0 + fl.y1) / 2, z0 + FH / 2 + EYE), 2.3, FOV_IN, { abs: Math.PI - 0.25 * side }, 0.3);
-      walk(V(fx, fl.y1 - 0.2, level(floor + 1) + EYE), 2.3, FOV_IN, { abs: Math.PI - 0.75 * side }, 0.05);
-      walk(V(fx, fl.y1 + 0.95, level(floor + 1) + EYE), 2, FOV_IN, { abs: Math.PI - 1.25 * side }, -0.04);
-      px = fx;
-      py = fl.y1 + 0.95;
-      if (strip) {
-        walk(V(sx, py, level(floor + 1) + EYE), 2.4);
-        px = sx;
-      }
+      walk(V(ux, stair.y + 1.2, z0 + EYE), 2.6, FOV_IN, { abs: Math.PI });
+      walk(V(ux, st.y0 + 0.3, z0 + EYE + 0.1), 2.2, FOV_IN, { abs: Math.PI }, 0.22);
+      walk(V(ux, st.yTop - 0.2, halfZ + EYE), 2.2, FOV_IN, { abs: Math.PI }, 0.28);
+      walk(V((ux + dx) / 2, landY, halfZ + EYE), 1.6, FOV_IN, { abs: Math.PI / 2 }, 0);
+      walk(V(dx, st.yTop - 0.2, halfZ + EYE + 0.1), 1.6, FOV_IN, { abs: 0 }, 0.2);
+      walk(V(dx, st.y0 + 0.2, level(floor + 1) + EYE), 2.2, FOV_IN, { abs: 0 }, 0.12);
+      walk(V(dx, stair.y + 1.4, level(floor + 1) + EYE), 2, FOV_IN, { abs: 0 }, -0.04);
+      px = dx;
+      py = stair.y + 1.4;
       cur = above;
     }
   }

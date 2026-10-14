@@ -3,6 +3,8 @@
 // concept for an architect to develop, not a construction drawing.
 
 import { EXTERIOR_TEMPLATES, FURNITURE, HOUSE_TYPES, INTERIOR_TEMPLATES } from "./catalog";
+import { checkPlan } from "./planCheck";
+import { checkVastu } from "./vastu";
 import type { Assumptions, Brief, Design, DirectionId, Furniture, FurnitureKind, MaterialChoice, MaterialSlot, RoofType, Room, RoomType } from "./types";
 
 const half = (value: number) => Math.round(value * 2) / 2;
@@ -73,13 +75,53 @@ interface Spec {
   name?: string;
   weight: number;
   min?: number;
+  /** An en-suite: opens only from the room placed just before it. */
+  attach?: boolean;
+}
+
+/** One way of laying out a direction: mirrored or not, where the bands split, and the room order. */
+interface Variant {
+  mirror: boolean;
+  ratio: number;
+  shift: number;
+}
+
+export const VARIANTS: Variant[] = [
+  { mirror: false, ratio: 0, shift: 0 },
+  { mirror: true, ratio: 0, shift: 0 },
+  { mirror: false, ratio: 0.07, shift: 1 },
+  { mirror: true, ratio: 0.07, shift: 1 },
+  { mirror: false, ratio: -0.07, shift: 2 },
+  { mirror: true, ratio: -0.07, shift: 2 },
+  { mirror: false, ratio: 0, shift: 3 },
+  { mirror: true, ratio: 0, shift: 3 },
+];
+
+/** Rotate a band's rooms by whole units (a bedroom keeps its en-suite), leaving fixed-position rooms first. */
+function rotateBand(specs: Spec[], by: number, keepFirst: (s: Spec) => boolean): Spec[] {
+  const head = specs.length && keepFirst(specs[0]!) ? [specs[0]!] : [];
+  const rest = specs.slice(head.length);
+  const units: Spec[][] = [];
+  for (const spec of rest) {
+    if (spec.attach && units.length) units[units.length - 1]!.push(spec);
+    else units.push([spec]);
+  }
+  if (units.length < 2) return specs;
+  const k = ((by % units.length) + units.length) % units.length;
+  return [...head, ...units.slice(k), ...units.slice(0, k)].flat();
 }
 
 const MIN_DEPTH: Partial<Record<RoomType, number>> = { parking: 17, bedroom: 10, master: 12, living: 12, bath: 5.5, kitchen: 8, dining: 8, study: 8, pooja: 4.5, utility: 5 };
 
+/** NBC 2016 minimum floor areas (ft²): 9.5 m² main rooms, 7.5 m² other habitable rooms, 5 m² kitchens, 2.8 m² bath + WC. */
+const MIN_AREA: Partial<Record<RoomType, number>> = { master: 103, living: 103, bedroom: 81, family: 81, study: 81, dining: 81, kitchen: 54, bath: 31 };
+
+/** The least depth a room needs in a band of this width to meet both its depth and area minimums. */
+const minDepthIn = (spec: Spec, width: number) => Math.max(spec.min ?? MIN_DEPTH[spec.type] ?? 6, (MIN_AREA[spec.type] ?? 0) / Math.max(1, width));
+
 /** Split a length between specs: each gets its minimum, the rest goes by weight. */
-function split(total: number, specs: Spec[]): number[] {
-  const mins = specs.map((spec) => spec.min ?? MIN_DEPTH[spec.type] ?? 6);
+function split(total: number, specs: Spec[], width = 12): number[] {
+  const mins = specs.map((spec) => minDepthIn(spec, width));
   const sumMin = mins.reduce((a, b) => a + b, 0);
   if (sumMin >= total) return mins.map((m) => (m / sumMin) * total);
   const weights = specs.map((spec) => spec.weight);
@@ -157,7 +199,7 @@ function planFloors(brief: Brief, direction: DirectionId): FloorPlan[] {
       for (let n = 0; n < bedCount; n++) {
         (n % 2 === 0 ? b : a).push({ type: floors === 1 && n === 0 ? "master" : "bedroom", weight: 2.4 });
         if (extraBaths > 0 && floors === 1 && n === 0) {
-          (n % 2 === 0 ? b : a).push({ type: "bath", name: "En-suite", weight: 0.9 });
+          (n % 2 === 0 ? b : a).push({ type: "bath", name: "En-suite", weight: 0.9, attach: true });
           extraBaths -= 1;
         }
       }
@@ -171,7 +213,7 @@ function planFloors(brief: Brief, direction: DirectionId): FloorPlan[] {
         const target = load(a) <= load(b) ? a : b;
         target.push({ type: master ? "master" : "bedroom", weight: master ? 3 : 2.4 });
         if (extraBaths > 0 && (master || n >= 1)) {
-          target.push({ type: "bath", name: master ? "Master bath" : "En-suite", weight: 1 });
+          target.push({ type: "bath", name: master ? "Master bath" : "En-suite", weight: 1, attach: true });
           extraBaths -= 1;
         }
       }
@@ -203,25 +245,33 @@ const ROOM_NAMES: Partial<Record<RoomType, string>> = {
   family: "Family lounge",
 };
 
-function layoutRooms(brief: Brief, direction: DirectionId, fp: Footprint): Room[] {
-  const plans = planFloors(brief, direction);
-  const coreW = direction === "courtyard" ? 12 : 9;
+function layoutRooms(brief: Brief, direction: DirectionId, fp: Footprint, variant: Variant = VARIANTS[0]!): Room[] {
+  const plans = planFloors(brief, direction).map((plan, floor) => ({
+    core: plan.core,
+    // Ground: the car porch stays at the front; living and dining may swap.
+    a: floor === 0 ? (variant.shift % 2 ? [...plan.a].reverse() : plan.a) : rotateBand(plan.a, variant.shift, () => false),
+    b: rotateBand(plan.b, floor === 0 ? variant.shift : variant.shift + 1, (spec) => spec.type === "parking"),
+  }));
+  // Multi-storey cores are 12 ft: a dog-leg stair plus a passage beside it to the room behind.
+  const coreW = direction === "courtyard" || brief.floors > 1 ? 12 : 9;
   const rest = fp.w - coreW;
   const single = rest < 18;
-  const aW = single ? rest : half(rest * (direction === "open" ? 0.58 : 0.5));
+  const aW = single ? rest : half(rest * clamp((direction === "open" ? 0.58 : 0.5) + variant.ratio, 0.4, 0.66));
   const bW = single ? 0 : rest - aW;
   // Band x positions per direction.
   const x0 = fp.x;
   const bands =
     direction === "open"
-      ? { a: x0, b: x0 + aW, core: x0 + aW + bW }
+      ? // The living band sits beside the stair core, so the foyer opens straight into it.
+        { b: x0, a: x0 + bW, core: x0 + bW + aW }
       : single
         ? { a: x0, b: x0, core: x0 + aW }
         : { a: x0, core: x0 + aW, b: x0 + aW + coreW };
 
   // Core cells: identical y on every floor so the stair stacks.
   const D = fp.d;
-  const stairD = brief.floors > 1 ? Math.min(13, half(D * 0.42)) : 0;
+  // A dog-leg stair: front landing + eight 10½″ treads + half-landing ≈ 13½ ft.
+  const stairD = brief.floors > 1 ? Math.min(14, half(D * 0.42)) : 0;
   let frontD = half(clamp(D * (direction === "courtyard" ? 0.4 : 0.3), 7, direction === "courtyard" ? 18 : 14));
   if (D - frontD - stairD < 5.5) frontD = half(Math.max(5, D - stairD - 5.5));
   const backD = D - frontD - stairD;
@@ -238,13 +288,23 @@ function layoutRooms(brief: Brief, direction: DirectionId, fp: Footprint): Room[
   };
 
   plans.forEach((plan, floor) => {
+    let previous: Room | undefined;
     const push = (spec: Spec, x: number, y: number, w: number, d: number) => {
       if (w < 0.5 || d < 0.5) return;
-      rooms.push({ id: `r${floor}-${rooms.length}`, name: nameOf(spec), type: spec.type, floor, x: half(x), y: half(y), w: half(w), d: half(d) });
+      const room: Room = { id: `r${floor}-${rooms.length}`, name: nameOf(spec), type: spec.type, floor, x: half(x), y: half(y), w: half(w), d: half(d) };
+      if (spec.attach && previous && (previous.type === "bedroom" || previous.type === "master")) room.attachedTo = previous.id;
+      rooms.push(room);
+      previous = room;
     };
     // Core
     const coreCells = plan.core;
-    if (coreCells.length === 3) {
+    // Open Linear upper floors: a full-width lounge across the front is the landing every bedroom opens off.
+    const lounge = direction === "open" && floor > 0 && !single && coreCells.length === 3;
+    if (lounge) {
+      push(coreCells[0]!, fp.x, fp.y, fp.w, frontD);
+      push(coreCells[1]!, bands.core, fp.y + frontD, coreW, stairD);
+      push(coreCells[2]!, bands.core, fp.y + frontD + stairD, coreW, backD);
+    } else if (coreCells.length === 3) {
       push(coreCells[0]!, bands.core, fp.y, coreW, frontD);
       push(coreCells[1]!, bands.core, fp.y + frontD, coreW, stairD);
       push(coreCells[2]!, bands.core, fp.y + frontD + stairD, coreW, backD);
@@ -254,10 +314,12 @@ function layoutRooms(brief: Brief, direction: DirectionId, fp: Footprint): Room[
       push(coreCells[1]!, bands.core, fp.y + sizes[0]!, coreW, sizes[1]!);
     }
     // Bands
+    const y0 = lounge ? fp.y + frontD : fp.y;
+    const depth = D - (y0 - fp.y);
     const stack = (specs: Spec[], x: number, w: number) => {
       if (!specs.length || w <= 0) return;
-      const sizes = snap(split(D, specs), D);
-      let y = fp.y;
+      const sizes = snap(split(depth, specs, w), depth);
+      let y = y0;
       specs.forEach((spec, index) => {
         push(spec, x, y, w, sizes[index]!);
         y += sizes[index]!;
@@ -269,7 +331,44 @@ function layoutRooms(brief: Brief, direction: DirectionId, fp: Footprint): Room[
       stack(plan.b, bands.b, bW);
     }
   });
+  alignToFloorBelow(rooms, brief.floors);
+  if (variant.mirror) for (const r of rooms) r.x = half(fp.x + fp.w - (r.x - fp.x) - r.w);
   return rooms;
+}
+
+/**
+ * Structural alignment: nudge each upper-floor cross wall onto the nearest wall
+ * line of the floor below (within 3.5 ft) when both rooms stay above their minimum
+ * depth, so more walls stand on walls instead of on beams.
+ */
+function alignToFloorBelow(rooms: Room[], floors: number) {
+  for (let f = 1; f < floors; f++) {
+    const below = rooms.filter((r) => r.floor === f - 1);
+    const columns = new Map<string, Room[]>();
+    for (const r of rooms.filter((q) => q.floor === f)) {
+      const key = `${r.x}:${r.w}`;
+      columns.set(key, [...(columns.get(key) ?? []), r]);
+    }
+    for (const stack of columns.values()) {
+      stack.sort((p, q) => p.y - q.y);
+      const x0 = stack[0]!.x;
+      const x1 = x0 + stack[0]!.w;
+      const cuts = [...new Set(below.filter((r) => r.x < x1 - 0.5 && r.x + r.w > x0 + 0.5).flatMap((r) => [r.y, r.y + r.d]))];
+      for (let i = 0; i < stack.length - 1; i++) {
+        const top = stack[i]!;
+        const next = stack[i + 1]!;
+        const at = top.y + top.d;
+        const target = cuts.filter((c) => Math.abs(c - at) <= 3.5 && Math.abs(c - at) > 0.01).sort((p, q) => Math.abs(p - at) - Math.abs(q - at))[0];
+        if (target === undefined) continue;
+        const d1 = target - top.y;
+        const d2 = next.y + next.d - target;
+        if (d1 < (MIN_DEPTH[top.type] ?? 6) || d2 < (MIN_DEPTH[next.type] ?? 6)) continue;
+        top.d = half(d1);
+        next.y = half(target);
+        next.d = half(d2);
+      }
+    }
+  }
 }
 
 let furnitureSeq = 0;
@@ -371,6 +470,7 @@ export function materialsFor(exteriorId: string, interiorId: string): Record<Mat
 }
 
 function roofFor(brief: Brief, direction: DirectionId): RoofType {
+  if (brief.roof && brief.roof !== "auto") return brief.roof;
   if (brief.requirements.includes("terrace")) return "flat";
   const base = HOUSE_TYPES[brief.houseType].roof;
   if (direction === "courtyard" && base === "flat" && brief.houseType !== "contemporary") return "hip";
@@ -378,9 +478,32 @@ function roofFor(brief: Brief, direction: DirectionId): RoofType {
   return base;
 }
 
-export function generate(brief: Brief, direction: DirectionId): Design {
+/** How good a layout is: the plan check, plus Vastu when the brief asks for it. */
+export function scoreDesign(brief: Brief, design: Design) {
+  const plan = checkPlan(design, brief.floors).score;
+  return brief.requirements.includes("vastu") ? plan * 0.5 + checkVastu(brief, design).score * 0.5 : plan;
+}
+
+/**
+ * Lay out a direction. With no variant given, every variant is tried and the one
+ * that scores best on the plan check (and Vastu, if asked for) is returned.
+ */
+export function generate(brief: Brief, direction: DirectionId, variant?: number): Design {
+  if (variant === undefined) {
+    let best: Design | null = null;
+    let bestScore = -1;
+    VARIANTS.forEach((_, v) => {
+      const d = generate(brief, direction, v);
+      const score = scoreDesign(brief, d);
+      if (score > bestScore + 0.01) {
+        best = d;
+        bestScore = score;
+      }
+    });
+    return best!;
+  }
   const fp = footprintOf(brief);
-  const rooms = layoutRooms(brief, direction, fp);
+  const rooms = layoutRooms(brief, direction, fp, VARIANTS[variant % VARIANTS.length]);
   const furniture = rooms.flatMap(furnish);
   let { exterior, interior } = DIRECTION_TEMPLATES[direction];
   if (brief.houseType === "traditional") exterior = "laterite";
@@ -396,6 +519,7 @@ export function generate(brief: Brief, direction: DirectionId): Design {
     lighting: { hour: 16.5, interior: false },
     exteriorTemplate: exterior,
     interiorTemplate: interior,
+    variant: variant % VARIANTS.length,
   };
 }
 

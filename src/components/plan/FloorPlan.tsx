@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { FURNITURE, ROOM_TYPES } from "@/lib/catalog";
-import { openingsOf, partitionsOf, type Side } from "@/lib/openings";
+import { movableWalls, wallLimits, type WallLine } from "@/lib/edit";
+import { openingsOf, partitionsOf, stairOf, type Side } from "@/lib/openings";
 import type { Design, Furniture, Room } from "@/lib/types";
 
 const S = 10; // svg units per foot
@@ -27,6 +28,8 @@ interface Props {
   /** Called while dragging (preview) and once more with done=true. */
   onMoveFurniture?: (id: string, x: number, y: number, done: boolean) => void;
   onDragStart?: () => void;
+  /** Drag an interior wall: delta in feet from where the drag began; done=true on release. */
+  onMoveWall?: (line: WallLine, delta: number, done: boolean) => void;
   showFurniture?: boolean;
   showLabels?: boolean;
   className?: string;
@@ -128,7 +131,7 @@ function FurnitureGlyph({ item }: { item: Furniture }) {
   }
 }
 
-export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, onMoveFurniture, onDragStart, showFurniture = true, showLabels = true, className, title }: Props) {
+export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, onMoveFurniture, onDragStart, onMoveWall, showFurniture = true, showLabels = true, className, title }: Props) {
   const fp = design.footprint;
   const svgRef = React.useRef<SVGSVGElement>(null);
   const X = (x: number) => (x - fp.x + MARGIN) * S;
@@ -215,6 +218,11 @@ export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSe
     }
   });
 
+  // Drag interior walls. Lines come from the design as it was when the drag began.
+  const walls0 = React.useMemo(() => (onMoveWall ? movableWalls(design, floor) : []), [design, floor, onMoveWall]);
+  const wallDrag = React.useRef<{ line: WallLine; start: number; limits: [number, number]; delta: number } | null>(null);
+  const [activeWall, setActiveWall] = React.useState<{ line: WallLine; delta: number } | null>(null);
+
   // Drag furniture.
   const drag = React.useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
   const toPlan = (clientX: number, clientY: number) => {
@@ -248,6 +256,20 @@ export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSe
       role="img"
       aria-label={title ?? `Floor plan, ${rooms.length} rooms`}
       onPointerMove={(e) => {
+        const wd = wallDrag.current;
+        if (wd && onMoveWall) {
+          const p = toPlan(e.clientX, e.clientY);
+          if (!p) return;
+          const raw = (wd.line.orient === "v" ? p.x : p.y) - wd.start;
+          const delta = Math.round(Math.min(wd.limits[1], Math.max(wd.limits[0], raw)) * 2) / 2;
+          if (delta !== wd.delta) {
+            if (wd.delta === 0 && delta !== 0) onDragStart?.();
+            wd.delta = delta;
+            setActiveWall({ line: wd.line, delta });
+            onMoveWall(wd.line, delta, false);
+          }
+          return;
+        }
         const d = drag.current;
         if (!d || !onMoveFurniture) return;
         const p = toPlan(e.clientX, e.clientY);
@@ -261,6 +283,13 @@ export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSe
         onMoveFurniture(d.id, c.x, c.y, false);
       }}
       onPointerUp={() => {
+        const wd = wallDrag.current;
+        if (wd) {
+          if (wd.delta !== 0) onMoveWall?.(wd.line, wd.delta, true);
+          wallDrag.current = null;
+          setActiveWall(null);
+          return;
+        }
         const d = drag.current;
         if (d?.moved && onMoveFurniture) {
           const item = design.furniture.find((f) => f.id === d.id);
@@ -303,17 +332,25 @@ export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSe
       })}
       {/* Stair treads with the walking line */}
       {stairs.map((room) => {
-        const n = 14;
-        const treads = Array.from({ length: n + 1 }, (_, i) => room.y + 0.6 + ((room.d - 2.5) * i) / n);
-        const x0 = room.x + 0.6;
-        const x1 = room.x + 0.6 + Math.min(room.w - 1.2, 3.6);
+        // Dog-leg: flight 1 up toward the back, half-landing, flight 2 back to the front.
+        const st = stairOf(room, design.floorHeight);
+        const treads = Array.from({ length: st.treads + 1 }, (_, i) => st.y0 + i * st.run);
+        const ux = (st.up.x0 + st.up.x1) / 2;
+        const dx = (st.down.x0 + st.down.x1) / 2;
+        const arrow = (x: number, from: number, to: number) => {
+          const dir = Math.sign(Y(to) - Y(from));
+          return `M${X(x)} ${Y(from)}V${Y(to)}M${X(x) - 4} ${Y(to) - dir * 7}L${X(x)} ${Y(to)}L${X(x) + 4} ${Y(to) - dir * 7}`;
+        };
+        const top = Math.min(Y(st.yTop), Y(st.well.y1));
         return (
           <g key={`st${room.id}`} className="pointer-events-none">
             {treads.map((y, i) => (
-              <path key={i} d={`M${X(x0)} ${Y(y)}H${X(x1)}`} className="stroke-[var(--plan-ink-3)] [stroke-width:0.7]" />
+              <path key={i} d={`M${X(st.up.x0)} ${Y(y)}H${X(st.up.x1)}M${X(st.down.x0)} ${Y(y)}H${X(st.down.x1)}`} className="stroke-[var(--plan-ink-3)] [stroke-width:0.7]" />
             ))}
-            <path d={`M${X((x0 + x1) / 2)} ${Y(treads[0]!)}V${Y(treads[n]!) + 6}`} className="stroke-[var(--plan-ink-2)] [stroke-width:0.8]" markerEnd="" />
-            <path d={`M${X((x0 + x1) / 2) - 4} ${Y(treads[n]!) + 10}L${X((x0 + x1) / 2)} ${Y(treads[n]!) + 3}L${X((x0 + x1) / 2) + 4} ${Y(treads[n]!) + 10}`} className="fill-none stroke-[var(--plan-ink-2)] [stroke-width:0.8]" />
+            <rect x={X(st.up.x0)} y={top} width={X(st.down.x1) - X(st.up.x0)} height={Math.abs(Y(st.well.y1) - Y(st.yTop))} className="fill-none stroke-[var(--plan-ink-3)] [stroke-width:0.7]" />
+            <path d={`M${X(st.up.x1)} ${Y(st.y0)}V${Y(st.yTop)}M${X(st.down.x0)} ${Y(st.y0)}V${Y(st.yTop)}`} className="stroke-[var(--plan-ink-2)] [stroke-width:0.9]" />
+            <path d={arrow(ux, st.y0 + 0.3, st.yTop - 0.3)} className="fill-none stroke-[var(--plan-ink-2)] [stroke-width:0.8]" />
+            <path d={arrow(dx, st.yTop - 0.3, st.y0 + 0.3)} className="fill-none stroke-[var(--plan-ink-2)] [stroke-width:0.8]" />
           </g>
         );
       })}
@@ -350,6 +387,50 @@ export function FloorPlan({ design, floor, selectedRoom, selectedFurniture, onSe
       <g className="pointer-events-none">
         {walls}
         {parts}
+        {/* Wall handles: drag an interior wall to resize the rooms either side. */}
+        {onMoveWall && !activeWall
+          ? walls0.map((line, i) => {
+              const v = line.orient === "v";
+              return (
+                <g key={`wh${i}`} className="group cursor-[col-resize]" style={{ cursor: v ? "col-resize" : "row-resize" }}>
+                  <rect
+                    x={v ? X(line.at) - 5 : X(line.from)}
+                    y={v ? Y(line.to) : Y(line.at) - 5}
+                    width={v ? 10 : (line.to - line.from) * S}
+                    height={v ? (line.to - line.from) * S : 10}
+                    fill="transparent"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      (e.currentTarget.ownerSVGElement as SVGSVGElement | null)?.setPointerCapture?.(e.pointerId);
+                      const p = toPlan(e.clientX, e.clientY);
+                      if (!p) return;
+                      wallDrag.current = { line, start: v ? p.x : p.y, limits: wallLimits(design, line), delta: 0 };
+                    }}
+                  >
+                    <title>Drag to resize the rooms either side</title>
+                  </rect>
+                  <path d={v ? `M${X(line.at)} ${Y(line.to)}V${Y(line.from)}` : `M${X(line.from)} ${Y(line.at)}H${X(line.to)}`} className="pointer-events-none stroke-[var(--color-moss)] opacity-0 transition-opacity group-hover:opacity-100 [stroke-dasharray:4_3] [stroke-width:2]" />
+                </g>
+              );
+            })
+          : null}
+        {activeWall ? (
+          (() => {
+            const { line, delta } = activeWall;
+            const v = line.orient === "v";
+            const at = line.at + delta;
+            const mid = (line.from + line.to) / 2;
+            return (
+              <g className="pointer-events-none">
+                <path d={v ? `M${X(at)} ${Y(line.to)}V${Y(line.from)}` : `M${X(line.from)} ${Y(at)}H${X(line.to)}`} className="stroke-[var(--color-moss)] [stroke-width:2.5]" />
+                <g transform={`translate(${v ? X(at) : X(mid)} ${v ? Y(mid) : Y(at)})`}>
+                  <rect x={-30} y={-11} width={60} height={22} rx={6} className="fill-[var(--color-moss)]" />
+                  <text textAnchor="middle" y={4} className="fill-white font-mono text-[10px]">{delta > 0 ? "+" : ""}{delta} ft</text>
+                </g>
+              </g>
+            );
+          })()
+        ) : null}
         {marks}
         {rooms
           .filter((r) => r.id === selectedRoom)

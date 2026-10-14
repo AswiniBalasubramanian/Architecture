@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ArrowRight, Check } from "@phosphor-icons/react";
 import { Button, Eyebrow, Field, NumberInput, SiteHeader, Stepper, inputClass } from "@/components/ui/kit";
-import { CURRENCIES, HOUSE_TYPES, REQUIREMENTS } from "@/lib/catalog";
+import { CURRENCIES, FACINGS, HOUSE_TYPES, REQUIREMENTS } from "@/lib/catalog";
 import { defaultAssumptions, defaultBrief, footprintOf } from "@/lib/generator";
 import { saveProject } from "@/lib/persist";
 import { getSession } from "@/lib/session";
@@ -162,6 +162,20 @@ export default function NewProject() {
               <Field label="Built-up area" htmlFor="bu" error={shown("builtUp")} hint="All floors together">
                 <NumberInput id="bu" value={brief.builtUp} onChange={(v) => set("builtUp", v)} step={50} suffix="sq ft" invalid={Boolean(shown("builtUp"))} />
               </Field>
+              <div className="flex flex-col gap-2 sm:col-span-3">
+                <span className="text-[13px] font-medium text-ink">Road faces</span>
+                <div role="radiogroup" aria-label="Road faces" className="flex flex-wrap gap-1.5">
+                  {(Object.keys(FACINGS) as Array<keyof typeof FACINGS>).map((k) => {
+                    const on = (brief.facing ?? "east") === k;
+                    return (
+                      <button key={k} type="button" role="radio" aria-checked={on} onClick={() => setBrief((b) => ({ ...b, facing: k }))} className={on ? "rounded-lg border border-ink bg-ink px-3 py-1.5 text-[13px] text-paper" : "rounded-lg border border-line bg-card px-3 py-1.5 text-[13px] text-ink-2 transition hover:border-line-strong"}>
+                        {FACINGS[k]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-[12px] text-muted">The compass direction of the street frontage. Used for Vastu placement and the sun.</span>
+              </div>
             </div>
           </fieldset>
 

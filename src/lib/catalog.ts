@@ -22,7 +22,10 @@ export const REQUIREMENTS: Record<Requirement, string> = {
   garden: "Garden-facing living",
   terrace: "Roof terrace",
   family: "Family lounge upstairs",
+  vastu: "Follow Vastu (and feng shui basics)",
 };
+
+export const FACINGS: Record<import("./types").Facing, string> = { north: "North", east: "East", south: "South", west: "West" };
 
 export const CURRENCIES: Record<Currency, { symbol: string; locale: string }> = {
   INR: { symbol: "₹", locale: "en-IN" },

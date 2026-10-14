@@ -12,10 +12,11 @@ import { ProjectMissing, ProjectSkeleton, useProject } from "@/components/Projec
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
 import { Button, Eyebrow, Logo, Segmented } from "@/components/ui/kit";
 import { DIRECTIONS, HOUSE_TYPES, floorName } from "@/lib/catalog";
-import { footprintOf, generate, statsOf } from "@/lib/generator";
+import { footprintOf, generate, statsOf, VARIANTS } from "@/lib/generator";
+import { checkPlan } from "@/lib/planCheck";
 import { saveProject } from "@/lib/persist";
 import { money, sqft, withDesign } from "@/lib/projects";
-import type { DirectionId } from "@/lib/types";
+import type { DirectionId, RoofType } from "@/lib/types";
 
 type Mode = "build" | "plan" | "3d";
 const PIPELINE = [
@@ -38,20 +39,34 @@ export default function GeneratePage() {
   const [continuing, setContinuing] = React.useState(false);
 
   React.useEffect(() => setGl(webglAvailable()), []);
+  // Start on the saved direction once; later reloads of the project must not undo the user's pick.
+  const initial = React.useRef(false);
   React.useEffect(() => {
-    if (project?.design) setDirection(project.design.direction);
-  }, [project?.design]);
+    if (initial.current || !project) return;
+    initial.current = true;
+    if (project.design) setDirection(project.design.direction);
+  }, [project]);
+  // Per direction: which layout variant is showing (undefined = the best-scoring one).
+  const [variants, setVariants] = React.useState<Partial<Record<DirectionId, number>>>({});
+  const [roof, setRoof] = React.useState<RoofType | "auto">("auto");
+  const brief0 = project?.brief;
+  const briefNow = React.useMemo(() => (brief0 ? { ...brief0, roof } : null), [brief0, roof]);
 
   const designs = React.useMemo(() => {
-    if (!project) return null;
-    return (Object.keys(DIRECTIONS) as DirectionId[]).map((d) => ({ id: d, design: generate(project.brief, d) }));
-  }, [project]);
+    if (!briefNow) return null;
+    return (Object.keys(DIRECTIONS) as DirectionId[]).map((d) => ({ id: d, design: generate(briefNow, d, variants[d]) }));
+  }, [briefNow, variants]);
 
   if (status === "loading") return <ProjectSkeleton />;
   if (status === "missing" || !project || !designs) return <ProjectMissing />;
 
-  const brief = project.brief;
+  const brief = briefNow!;
   const current = designs.find((d) => d.id === direction)!.design;
+  const plan = checkPlan(current, brief.floors);
+  const another = () => {
+    setVariants((v) => ({ ...v, [direction]: ((current.variant ?? 0) + 1) % VARIANTS.length }));
+    if (mode === "build") setMode("plan");
+  };
   const fp = footprintOf(brief);
   const fpNotes = [...fp.notes];
   if (direction === "courtyard" && fp.w < 32) fpNotes.push(`At ${fp.w} ft wide, a central court leaves rooms under 10 ft across. Open Linear or Central Core will plan better here.`);
@@ -67,16 +82,17 @@ export default function GeneratePage() {
       setPipeline(3);
     }, 700);
   };
+  // Switching direction answers immediately in the current view; only the construction view replays.
   const pick = (d: DirectionId) => {
     setDirection(d);
-    setMode("build");
-    setAuto(true);
-    setPipeline(0);
+    if (mode === "build") {
+      setAuto(true);
+      setPipeline(0);
+    }
   };
   const choose = () => {
     setContinuing(true);
-    const design = generate(brief, direction);
-    const ok = saveProject(withDesign(project, design));
+    const ok = saveProject(withDesign({ ...project, brief }, current));
     if (!ok) {
       setContinuing(false);
       return;
@@ -147,8 +163,34 @@ export default function GeneratePage() {
                 {n}
               </p>
             ))}
+            <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-ink">
+                  Layout {(current.variant ?? 0) + 1} of {VARIANTS.length}
+                  <span className="ml-2 font-mono text-[11px] text-muted">plan check {plan.score}</span>
+                </span>
+                <button type="button" onClick={another} className="rounded-md border border-line px-2 py-1 text-[12px] text-ink-2 transition hover:border-line-strong hover:text-ink active:scale-[0.98]">
+                  Another layout
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] text-muted">Roof</span>
+                <Segmented
+                  label="Roof"
+                  size="sm"
+                  value={roof}
+                  onChange={(r: RoofType | "auto") => setRoof(r)}
+                  options={[
+                    { value: "auto", label: "Auto" },
+                    { value: "flat", label: "Flat" },
+                    { value: "gable", label: "Gable" },
+                    { value: "hip", label: "Hip" },
+                  ]}
+                />
+              </div>
+            </div>
             <p className="text-[12px] leading-relaxed text-muted">
-              Generated in your browser by a deterministic template engine, not an AI service. Treat it as a concept: structure, services and local rules need validation.
+              Generated in your browser by a deterministic planning engine, not an AI service. Each direction starts from its best-scoring layout on the plan check{brief.requirements.includes("vastu") ? " and Vastu" : ""}. Treat it as a concept: structure, services and local rules need validation.
             </p>
             <Button variant="primary" size="lg" onClick={choose} disabled={continuing}>
               {continuing ? "Opening studio…" : `Continue with ${DIRECTIONS[direction].label}`}

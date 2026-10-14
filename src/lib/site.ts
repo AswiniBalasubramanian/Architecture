@@ -6,9 +6,9 @@ export const SITE = {
   studio: "Studio Ash & Builders",
   author: "Aswini Balasubramanian",
   url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://studioarchitecturebyaswini.vercel.app").replace(/\/$/, ""),
-  title: "ARCHFORM — AI-assisted home design studio for architects",
+  title: "ARCHFORM — concept design studio for early client conversations",
   description:
-    "ARCHFORM turns a plot size, built-up area, rooms and budget into an editable house concept: three zoning directions, a live 2D floor plan, a textured 3D model, curated finishes and a shareable buyer walkthrough.",
+    "ARCHFORM turns a plot size, built-up area, rooms and budget into an editable house concept for the first conversations with a client: three zoning directions checked against NBC planning minimums and Vastu, a live 2D plan you can resize, a textured 3D model and a shareable walkthrough.",
   keywords: [
     "home design software",
     "architect house design tool",
@@ -55,7 +55,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "How does ARCHFORM generate a floor plan?",
-    a: "A deterministic template engine fits the per-floor area inside the plot's setbacks, then arranges rooms in three zoning directions: Open Linear, Central Core and Courtyard. The stair core stays aligned on every floor. The same brief always produces the same plan.",
+    a: "A deterministic planning engine fits the per-floor area inside the plot's setbacks, arranges rooms in three zoning directions (Open Linear, Central Core and Courtyard) with a dog-leg stair in an aligned core, places doors by circulation rules, and tries eight layouts per direction, keeping the one that scores best on a plan check of NBC room sizes, ventilation, circulation and wall alignment, plus Vastu when asked for.",
   },
   {
     q: "Are the generated plans ready for construction?",

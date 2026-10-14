@@ -4,7 +4,7 @@ import * as React from "react";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { FURNITURE } from "@/lib/catalog";
-import { flightOf, openingsOf, partitionsOf, type Opening, type Side } from "@/lib/openings";
+import { stairOf, openingsOf, partitionsOf, type Opening, type Side } from "@/lib/openings";
 import type { Brief, Design, Furniture, MaterialChoice, Room } from "@/lib/types";
 import { materialFor, surfaceMaterial, textureFor, TILE } from "./textures";
 import { Facade } from "./Facade";
@@ -308,18 +308,25 @@ function Partitions({ design, floor, z0, z1, mats }: { design: Design; floor: nu
 }
 
 function Stair({ room, z0, rise, mats }: { room: Room; z0: number; rise: number; mats: MaterialsSet }) {
-  const steps = Math.max(10, Math.round(rise / 0.6));
-  const width = Math.min(room.w - 1.2, 3.6);
-  const run = (room.d - 2.5) / steps;
-  const x0 = room.x + 0.6;
-  return (
-    <>
-      {Array.from({ length: steps }, (_, i) => (
-        <Block key={i} x0={x0} x1={x0 + width} y0={room.y + 0.6 + i * run} y1={room.y + 0.6 + (i + 1) * run} z0={z0} z1={z0 + ((i + 1) * rise) / steps} mat={i % 2 ? mats.wood : mats.slab} />
-      ))}
-      <Block x0={x0 + width} x1={x0 + width + 0.12} y0={room.y + 0.6} y1={room.y + 0.6 + steps * run} z0={z0 + 2.8} z1={z0 + 3} mat={mats.frames} />
-    </>
-  );
+  const st = stairOf(room, rise);
+  const h = st.riser;
+  const steps: React.ReactNode[] = [];
+  // Flight 1: from the front landing up toward the back.
+  for (let i = 0; i < st.treads; i++) {
+    const y = st.y0 + i * st.run;
+    steps.push(<Block key={`u${i}`} x0={st.up.x0} x1={st.up.x1} y0={y} y1={y + st.run} z0={z0} z1={z0 + (i + 1) * h} mat={i % 2 ? mats.wood : mats.slab} />);
+  }
+  // Half-landing across both flights.
+  steps.push(<Block key="land" x0={st.up.x0} x1={st.down.x1} y0={st.yTop} y1={st.well.y1} z0={z0 + (st.perFlight - 0.4) * h} z1={z0 + st.perFlight * h} mat={mats.slab} />);
+  steps.push(<Block key="landw" x0={st.up.x0} x1={st.down.x1} y0={st.yTop} y1={st.well.y1} z0={z0 + st.perFlight * h - 0.06} z1={z0 + st.perFlight * h} mat={mats.wood} />);
+  // Flight 2: back toward the front, arriving one floor up.
+  for (let i = 0; i < st.treads; i++) {
+    const y1 = st.yTop - i * st.run;
+    steps.push(<Block key={`d${i}`} x0={st.down.x0} x1={st.down.x1} y0={y1 - st.run} y1={y1} z0={z0 + st.perFlight * h - 0.6 + i * 0} z1={z0 + (st.perFlight + i + 1) * h} mat={i % 2 ? mats.wood : mats.slab} />);
+  }
+  // The waist slab under flight 2, and a spine wall between the flights.
+  steps.push(<Block key="spine" x0={st.up.x1} x1={st.down.x0} y0={st.y0} y1={st.yTop} z0={z0} z1={z0 + st.perFlight * h} mat={mats.slab} />);
+  return <>{steps}</>;
 }
 
 /* --------------------------------------------------------- furniture */
@@ -798,20 +805,24 @@ function SolarPanel({ x, y, w, d, z, tilt, mats }: { x: number; y: number; w: nu
 }
 
 function Balustrade({ room, z0, rise, mats }: { room: Room; z0: number; rise: number; mats: MaterialsSet }) {
-  const width = Math.min(room.w - 1.2, 3.6);
-  const x = room.x + 0.6 + width + 0.06;
-  const y0 = room.y + 0.6;
-  const y1 = room.y + room.d - 1.9;
-  const posts = 7;
+  const st = stairOf(room, rise);
+  const mid = (st.up.x1 + st.down.x0) / 2;
+  const half = st.perFlight * st.riser;
+  const posts = Math.max(3, st.treads);
   return (
     <>
       {Array.from({ length: posts + 1 }, (_, k) => {
         const t = k / posts;
-        const y = y0 + (y1 - y0) * t;
-        const base = z0 + rise * t;
-        return <Block key={k} x0={x - 0.05} x1={x + 0.05} y0={y - 0.05} y1={y + 0.05} z0={base} z1={base + 3} mat={mats.metal} />;
+        const y = st.y0 + (st.yTop - st.y0) * t;
+        return (
+          <React.Fragment key={k}>
+            <Block x0={mid - 0.2} x1={mid - 0.12} y0={y - 0.04} y1={y + 0.04} z0={z0 + half * t} z1={z0 + half * t + 3} mat={mats.metal} />
+            <Block x0={mid + 0.12} x1={mid + 0.2} y0={y - 0.04} y1={y + 0.04} z0={z0 + rise - half * t} z1={z0 + rise - half * t + 3} mat={mats.metal} />
+          </React.Fragment>
+        );
       })}
-      <Beam a={[x, y0, z0 + 3.05]} b={[x, y1, z0 + rise + 3.05]} w={0.12} h={0.16} mat={mats.wood} />
+      <Beam a={[mid - 0.16, st.y0, z0 + 3.05]} b={[mid - 0.16, st.yTop, z0 + half + 3.05]} w={0.12} h={0.16} mat={mats.wood} />
+      <Beam a={[mid + 0.16, st.yTop, z0 + half + 3.05]} b={[mid + 0.16, st.y0, z0 + rise + 3.05]} w={0.12} h={0.16} mat={mats.wood} />
     </>
   );
 }
@@ -857,25 +868,26 @@ function wallBehind(design: Design, item: Furniture): "exterior" | "partition" |
 /** A room's slab or floor, with the stairwell over the flight left open. */
 function piecesOf(r: Room, well: boolean, rise: number): Array<[number, number, number, number]> {
   if (!well) return [[r.x, r.x + r.w, r.y, r.y + r.d]];
-  const fl = flightOf(r, rise);
+  const w = stairOf(r, rise).well;
   return [
-    [r.x, fl.x0, r.y, r.y + r.d],
-    [fl.x1, r.x + r.w, r.y, r.y + r.d],
-    [fl.x0, fl.x1, r.y, fl.y0],
-    [fl.x0, fl.x1, fl.y1, r.y + r.d],
+    [r.x, w.x0, r.y, r.y + r.d],
+    [w.x1, r.x + r.w, r.y, r.y + r.d],
+    [w.x0, w.x1, r.y, w.y0],
+    [w.x0, w.x1, w.y1, r.y + r.d],
   ];
 }
 
 /** Glass guard with a timber handrail along the open sides of a stairwell. */
 function WellGuard({ room, z0, rise, mats }: { room: Room; z0: number; rise: number; mats: MaterialsSet }) {
-  const fl = flightOf(room, rise);
+  // The upper landing is open over flight 1; flight 2 arrives beside it.
+  const st = stairOf(room, rise);
+  const x0 = st.up.x0;
+  const x1 = st.up.x1 + 0.15;
   return (
     <>
-      <Block x0={fl.x1 - 0.03} x1={fl.x1 + 0.03} y0={fl.y0} y1={fl.y1} z0={z0} z1={z0 + 3.2} mat={mats.glass} cast={false} />
-      <Block x0={fl.x0} x1={fl.x1} y0={fl.y0 - 0.03} y1={fl.y0 + 0.03} z0={z0} z1={z0 + 3.2} mat={mats.glass} cast={false} />
-      <Block x0={fl.x1 - 0.09} x1={fl.x1 + 0.09} y0={fl.y0 - 0.09} y1={fl.y1} z0={z0 + 3.2} z1={z0 + 3.38} mat={mats.wood} />
-      <Block x0={fl.x0} x1={fl.x1} y0={fl.y0 - 0.09} y1={fl.y0 + 0.09} z0={z0 + 3.2} z1={z0 + 3.38} mat={mats.wood} />
-      <Block x0={fl.x1 - 0.06} x1={fl.x1 + 0.06} y0={fl.y0} y1={fl.y1} z0={z0} z1={z0 + 0.12} mat={mats.metal} />
+      <Block x0={x0} x1={x1} y0={st.y0 - 0.03} y1={st.y0 + 0.03} z0={z0} z1={z0 + 3.2} mat={mats.glass} cast={false} />
+      <Block x0={x0} x1={x1} y0={st.y0 - 0.09} y1={st.y0 + 0.09} z0={z0 + 3.2} z1={z0 + 3.38} mat={mats.wood} />
+      <Block x0={x0} x1={x1} y0={st.y0 - 0.06} y1={st.y0 + 0.06} z0={z0} z1={z0 + 0.12} mat={mats.metal} />
     </>
   );
 }

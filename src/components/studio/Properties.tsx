@@ -8,7 +8,11 @@ import { EXTERIOR_TEMPLATES, FURNITURE, INTERIOR_TEMPLATES, MATERIALS, ROOM_TEMP
 import { fmtFt } from "@/components/plan/FloorPlan";
 import { relative } from "@/lib/projects";
 import { useStudio } from "@/lib/store";
-import type { FurnitureKind, MaterialChoice, MaterialId, MaterialSlot } from "@/lib/types";
+import { roomDoors, roomWindows, setDoor, setWindow } from "@/lib/edit";
+import { checkPlan, type CheckStatus } from "@/lib/planCheck";
+import { checkVastu } from "@/lib/vastu";
+import { FACINGS } from "@/lib/catalog";
+import type { DoorChoice, FurnitureKind, MaterialChoice, MaterialId, MaterialSlot, RoofType } from "@/lib/types";
 
 function Section({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) {
   return (
@@ -115,8 +119,9 @@ function RoomPanel() {
             </div>
           ))}
         </dl>
-        <p className="text-[12px] text-muted">{ROOM_TYPES[room.type].label}. Room geometry is fixed in this version; resizing comes with advanced editing.</p>
+        <p className="text-[12px] text-muted">{ROOM_TYPES[room.type].label}. Drag any interior wall in the plan to resize the rooms either side.</p>
       </Section>
+      <OpeningsPanel roomId={room.id} />
       {room.type !== "void" && room.type !== "court" && room.type !== "stair" ? (
         <Section title="Room finish" aside={room.finish || room.wallColor ? <button type="button" className="text-[11px] text-muted underline-offset-2 hover:text-ink hover:underline" onClick={() => updateRoom(room.id, { finish: undefined, wallColor: undefined })}>Use scheme</button> : null}>
           <div className="grid grid-cols-1 gap-1.5">
@@ -152,6 +157,161 @@ function RoomPanel() {
           <p className="text-[12px] text-muted">Drag pieces in the plan to move them.</p>
         </Section>
       ) : null}
+    </>
+  );
+}
+
+const SIDE_LABEL = { front: "Front (street)", back: "Back", left: "Left side", right: "Right side" } as const;
+const DOOR_LABEL: Record<"door" | "open" | "wall" | "glass", string> = { door: "Door", open: "Open", wall: "Wall", glass: "Glazed" };
+
+/** Windows on the room's outside walls and doors to each neighbour, editable. */
+function OpeningsPanel({ roomId }: { roomId: string }) {
+  const design = useStudio((s) => s.design)!;
+  const commit = useStudio((s) => s.commit);
+  const room = design.rooms.find((r) => r.id === roomId);
+  if (!room || room.type === "void") return null;
+  const windows = room.type === "parking" || room.type === "court" ? [] : roomWindows(design, room);
+  const doors = roomDoors(design, room).filter((d) => d.kind !== "glass");
+  const step = "flex size-7 items-center justify-center rounded-md border border-line bg-card text-[13px] text-ink-2 transition hover:border-line-strong disabled:opacity-40";
+  return (
+    <>
+      {windows.length ? (
+        <Section title="Windows" aside={<span className="font-mono text-[11px] text-faint">outside walls</span>}>
+          <ul className="flex flex-col gap-2">
+            {windows.map((w) => (
+              <li key={w.side} className="flex items-center gap-2">
+                <span className="flex-1 text-[13px] text-ink-2">{SIDE_LABEL[w.side]}</span>
+                <button type="button" aria-label={`Narrower window, ${w.side}`} className={step} disabled={w.width <= 0} onClick={() => commit((d) => setWindow(d, room.id, w.side, w.width - 1 < 1.5 ? 0 : w.width - 1))}>
+                  −
+                </button>
+                <span className="tnum w-14 text-center font-mono text-[12px] text-ink">{w.width > 0 ? fmtFt(w.width) : "none"}</span>
+                <button type="button" aria-label={`Wider window, ${w.side}`} className={step} disabled={w.width >= w.max} onClick={() => commit((d) => setWindow(d, room.id, w.side, Math.min(w.max, Math.max(2, w.width + 1))))}>
+                  +
+                </button>
+                {w.overridden ? (
+                  <button type="button" className="text-[11px] text-muted hover:text-ink" onClick={() => commit((d) => setWindow(d, room.id, w.side, null))}>
+                    Reset
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+      {doors.length ? (
+        <Section title="Doors" aside={<span className="font-mono text-[11px] text-faint">to neighbours</span>}>
+          <ul className="flex flex-col gap-2">
+            {doors.map((d) => (
+              <li key={d.other.id} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2">{d.other.name}</span>
+                <div className="flex rounded-lg border border-line bg-card p-0.5">
+                  {(["door", "open", "wall"] as const).map((k) => {
+                    const on = d.kind === k;
+                    return (
+                      <button key={k} type="button" aria-pressed={on} onClick={() => commit((x) => setDoor(x, room.id, d.other.id, (k === "wall" ? "none" : k) as DoorChoice))} className={clsx("rounded-md px-2 py-1 text-[11px] transition", on ? "bg-ink text-paper" : "text-muted hover:text-ink")}>
+                        {DOOR_LABEL[k]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {d.overridden ? (
+                  <button type="button" className="text-[11px] text-muted hover:text-ink" onClick={() => commit((x) => setDoor(x, room.id, d.other.id, null))}>
+                    Auto
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[12px] text-muted">Doors start from planning rules: rooms open off circulation, en-suites only from their bedroom.</p>
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
+const STATUS: Record<CheckStatus, { dot: string; label: string }> = {
+  pass: { dot: "bg-moss", label: "Pass" },
+  warn: { dot: "bg-[#c99a4f]", label: "Check" },
+  fail: { dot: "bg-clay", label: "Fails" },
+};
+
+/** Plan check against NBC minimums and planning practice, plus Vastu and feng shui basics. */
+function CheckPanel() {
+  const design = useStudio((s) => s.design)!;
+  const project = useStudio((s) => s.project)!;
+  const select = useStudio((s) => s.select);
+  const setFloor = useStudio((s) => s.setFloor);
+  const brief = project.brief;
+  const plan = React.useMemo(() => checkPlan(design, brief.floors), [design, brief.floors]);
+  const vastu = React.useMemo(() => checkVastu(brief, design), [brief, design]);
+  const [showPass, setShowPass] = React.useState(false);
+  const groups = ["Room sizes", "Light & air", "Circulation", "Structure", "Stair"] as const;
+  const go = (roomId?: string) => {
+    const r = roomId && design.rooms.find((x) => x.id === roomId);
+    if (!r) return;
+    setFloor(r.floor);
+    select({ roomId: r.id, furnitureId: null });
+  };
+  return (
+    <>
+      <Section title="Plan check" aside={<span className="font-mono text-[11px] text-faint">NBC 2016 · Part 3</span>}>
+        <div className="flex items-end gap-4">
+          <span className="tnum font-display text-[46px] leading-none text-ink">{plan.score}</span>
+          <div className="flex gap-3 pb-1.5 font-mono text-[11px] text-muted">
+            {(["pass", "warn", "fail"] as const).map((k) => (
+              <span key={k} className="flex items-center gap-1.5">
+                <i className={clsx("size-2 rounded-full", STATUS[k].dot)} /> {plan.counts[k]} {STATUS[k].label.toLowerCase()}
+              </span>
+            ))}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-[12px] text-muted">
+          <input type="checkbox" checked={showPass} onChange={(e) => setShowPass(e.target.checked)} /> Show passing items
+        </label>
+        {groups.map((g) => {
+          const items = plan.items.filter((i) => i.group === g && (showPass || i.status !== "pass"));
+          if (!items.length) return null;
+          return (
+            <div key={g} className="flex flex-col gap-1">
+              <p className="pt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{g}</p>
+              <ul className="flex flex-col divide-y divide-line rounded-xl border border-line bg-card">
+                {items.map((i) => (
+                  <li key={i.id}>
+                    <button type="button" onClick={() => go(i.roomId)} className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition hover:bg-sand/60">
+                      <i className={clsx("mt-1.5 size-2 shrink-0 rounded-full", STATUS[i.status].dot)} aria-label={STATUS[i.status].label} />
+                      <span className="flex flex-col">
+                        <span className="text-[13px] text-ink">{i.label}</span>
+                        <span className="text-[12px] leading-snug text-muted">{i.detail}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+        <p className="text-[11px] leading-relaxed text-faint">A design aid, not an approval: check local bye-laws, structure and services with your engineer.</p>
+      </Section>
+      <Section title="Vastu & feng shui" aside={<span className="font-mono text-[11px] text-faint">road faces {FACINGS[brief.facing ?? "east"].toLowerCase()}</span>}>
+        <div className="flex items-end gap-3">
+          <span className="tnum font-display text-[38px] leading-none text-ink">{vastu.score}</span>
+          <span className="pb-1 text-[12px] text-muted">{brief.requirements.includes("vastu") ? "Vastu was asked for: layouts are chosen to suit it." : "Not asked for in the brief; shown for reference."}</span>
+        </div>
+        <ul className="flex flex-col divide-y divide-line rounded-xl border border-line bg-card">
+          {vastu.items.map((i) => (
+            <li key={i.id} className="flex items-start gap-2.5 px-3 py-2">
+              <i className={clsx("mt-1.5 size-2 shrink-0 rounded-full", i.ok ? "bg-moss" : i.soft ? "bg-[#c99a4f]" : "bg-clay")} />
+              <span className="flex flex-col">
+                <span className="text-[13px] text-ink">
+                  {i.label} <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-faint">{i.system}</span>
+                </span>
+                <span className="text-[12px] leading-snug text-muted">{i.detail}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11px] leading-relaxed text-faint">Common residential guidelines; traditions differ, so confirm with a Vastu consultant.</p>
+      </Section>
     </>
   );
 }
@@ -193,7 +353,8 @@ export function Properties() {
   const applyInterior = useStudio((s) => s.applyInterior);
   const setLighting = useStudio((s) => s.setLighting);
   const restore = useStudio((s) => s.restoreVersion);
-  const [tab, setTab] = React.useState<"exterior" | "interior" | "light">("exterior");
+  const [tab, setTab] = React.useState<"exterior" | "interior" | "light" | "check">("exterior");
+  const commit = useStudio((s) => s.commit);
   const hour = design.lighting.hour;
   const hh = Math.floor(hour);
   const mm = Math.round((hour - hh) * 60);
@@ -214,9 +375,26 @@ export function Properties() {
             { value: "exterior", label: "Exterior" },
             { value: "interior", label: "Interior" },
             { value: "light", label: "Light" },
+            { value: "check", label: "Check" },
           ]}
         />
       </div>
+      {tab === "check" ? <CheckPanel /> : null}
+      {tab === "exterior" ? (
+        <Section title="Roof">
+          <Segmented
+            label="Roof"
+            size="sm"
+            value={design.roof}
+            onChange={(roof: RoofType) => commit((d) => ({ ...d, roof }))}
+            options={[
+              { value: "flat", label: "Flat" },
+              { value: "gable", label: "Gable" },
+              { value: "hip", label: "Hip" },
+            ]}
+          />
+        </Section>
+      ) : null}
       {tab === "exterior" || tab === "interior" ? (
         <>
           <Section title={tab === "exterior" ? "Exterior scheme" : "Interior scheme"}>

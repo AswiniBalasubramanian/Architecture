@@ -29,12 +29,12 @@ export default function Landing() {
       {/* Hero: copy left, the live site model right. */}
       <section className="mx-auto grid max-w-[1400px] grid-cols-1 items-center gap-10 px-4 pb-16 pt-10 md:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:pt-16">
         <div className="af-enter flex max-w-[560px] flex-col gap-7">
-          <Eyebrow>Concept studio for residential architects</Eyebrow>
+          <Eyebrow>For the first conversations with a client</Eyebrow>
           <h1 className="font-display text-[44px] leading-[0.98] tracking-[-0.02em] text-ink md:text-[64px]">
             From a plot and a brief to a house your buyer can <em className="text-moss">walk through.</em>
           </h1>
           <p className="max-w-[52ch] text-[16px] leading-relaxed text-ink-2">
-            Enter the plot, the area and the rooms. ARCHFORM lays out three zoning directions, lets you set every finish against a live 2D plan and 3D model, then hands your client a link they can explore room by room.
+            Enter the plot, the area and the rooms. ARCHFORM lays out three zoning directions checked against planning minimums and Vastu, lets you resize rooms and set finishes against a live plan and 3D model, then gives your client a link to explore. A concept to talk over, not a construction drawing.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <ButtonLink href="/new" variant="primary" size="lg">

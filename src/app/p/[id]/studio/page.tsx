@@ -18,6 +18,8 @@ import { generate, statsOf } from "@/lib/generator";
 import { saveProject } from "@/lib/persist";
 import { relative, shareUrl, sqft, withDesign } from "@/lib/projects";
 import { useStudio, type ViewMode } from "@/lib/store";
+import { moveWall } from "@/lib/edit";
+import type { Design } from "@/lib/types";
 
 function ShareDialog({ onClose }: { onClose: () => void }) {
   const project = useStudio((s) => s.project)!;
@@ -87,6 +89,8 @@ export default function StudioPage() {
   const [gl, setGl] = React.useState(true);
   const [toast, setToast] = React.useState<string | null>(null);
   const [tour, setTour] = React.useState<Tour | null>(null);
+  // The design as it was when a wall drag began; each move is applied to it afresh.
+  const wallBase = React.useRef<Design | null>(null);
   const [ended, setEnded] = React.useState(false);
   // The walkthrough's own day/night switch; null follows the design's lighting.
   const [tourNight, setTourNight] = React.useState<boolean | null>(null);
@@ -300,7 +304,18 @@ export default function StudioPage() {
                   selectedFurniture={s.selection.furnitureId}
                   onSelectRoom={selectRoom}
                   onSelectFurniture={selectFurniture}
-                  onDragStart={s.beginGesture}
+                  onDragStart={() => {
+                    wallBase.current = useStudio.getState().design;
+                    s.beginGesture();
+                  }}
+                  onMoveWall={(line, delta, done) => {
+                    const base = wallBase.current ?? design;
+                    const next = () => moveWall(base, line, delta);
+                    if (done) {
+                      s.commit(next);
+                      wallBase.current = null;
+                    } else s.preview(next);
+                  }}
                   onMoveFurniture={(fid, x, y, done) => {
                     const move = (d: typeof design) => ({ ...d, furniture: d.furniture.map((f) => (f.id === fid ? { ...f, x, y } : f)) });
                     if (done) s.commit(move);
