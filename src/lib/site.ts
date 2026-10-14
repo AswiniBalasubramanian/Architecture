@@ -25,19 +25,28 @@ export const SITE = {
 };
 
 /**
- * Early feedback from a practising architect, quoted word for word from her
- * written review (October 2026). Only her positive points are used here.
+ * Early feedback from practising architects, quoted word for word from what
+ * they wrote (October 2026). Only their positive points are used here.
  */
-export const TESTIMONIAL = {
-  name: "Akshita Subramani",
-  role: "Architect",
-  context: "Early feedback, October 2026",
-  lead: "The instant 3D outcome with multiple viewing angles and split viewing is amazing. Although basic, it provides a fast and easy temporary fix for a very time consuming process.",
-  more: [
-    "The variety of material and colour choices provided are useful to show the interior and exterior finishes.",
-    "I like that it is a simple and interactive tool. As a layman, it gives a decent visualisation of what the house might look like.",
-  ],
-};
+export const TESTIMONIALS = [
+  {
+    name: "Akshita Shalini Subramani",
+    initials: "AS",
+    role: "Architect",
+    lead: "The instant 3D outcome with multiple viewing angles and split viewing is amazing. Although basic, it provides a fast and easy temporary fix for a very time consuming process.",
+    more: [
+      "The variety of material and colour choices provided are useful to show the interior and exterior finishes.",
+      "I like that it is a simple and interactive tool. As a layman, it gives a decent visualisation of what the house might look like.",
+    ],
+  },
+  {
+    name: "Narmada",
+    initials: "N",
+    role: "Senior Architect",
+    lead: "Best for the earlier conversation builds. I'm going to use it for my initial client convos.",
+    more: [] as string[],
+  },
+];
 
 export const FAQ: Array<{ q: string; a: string }> = [
   {

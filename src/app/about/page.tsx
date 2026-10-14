@@ -3,7 +3,7 @@ import { HeroFigure, SampleButton, SamplePlan } from "@/components/landing/HeroF
 import { ButtonLink, Eyebrow, Logo, SiteHeader } from "@/components/ui/kit";
 import type { Metadata } from "next";
 import { EXTERIOR_TEMPLATES, INTERIOR_TEMPLATES } from "@/lib/catalog";
-import { FAQ, SITE, TESTIMONIAL, structuredData } from "@/lib/site";
+import { FAQ, SITE, TESTIMONIALS, structuredData } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: { absolute: SITE.title },
@@ -142,35 +142,39 @@ export default function Landing() {
           <div className="flex max-w-[420px] flex-col gap-4">
             <Eyebrow>From the field</Eyebrow>
             <h2 id="voice-title" className="text-[30px] font-medium leading-[1.1] tracking-[-0.02em] md:text-[38px]">
-              What an architect said after trying it.
+              What architects said after trying it.
             </h2>
-            <p className="text-[15px] leading-relaxed text-ink-2">From her written review after a first session with the studio.</p>
+            <p className="text-[15px] leading-relaxed text-ink-2">From their written notes after first sessions with the studio.</p>
           </div>
-          <figure className="flex flex-col gap-10">
-            <blockquote className="font-display text-[30px] leading-[1.18] tracking-[-0.01em] text-ink md:text-[40px]">
-              <span aria-hidden className="mr-1 text-moss">“</span>
-              {TESTIMONIAL.lead}
-              <span aria-hidden className="text-moss">”</span>
-            </blockquote>
-            <div className="grid grid-cols-1 gap-6 border-t border-line pt-6 md:grid-cols-2">
-              {TESTIMONIAL.more.map((q) => (
-                <blockquote key={q} className="text-[15px] leading-relaxed text-ink-2">
-                  “{q}”
+          <div className="flex flex-col gap-14">
+            {TESTIMONIALS.map((t, i) => (
+              <figure key={t.name} className={i ? "flex flex-col gap-6 border-t border-line pt-10" : "flex flex-col gap-10"}>
+                <blockquote className={i ? "font-display text-[26px] leading-[1.2] tracking-[-0.01em] text-ink md:text-[32px]" : "font-display text-[30px] leading-[1.18] tracking-[-0.01em] text-ink md:text-[40px]"}>
+                  <span aria-hidden className="mr-1 text-moss">“</span>
+                  {t.lead}
+                  <span aria-hidden className="text-moss">”</span>
                 </blockquote>
-              ))}
-            </div>
-            <figcaption className="flex items-center gap-4">
-              <span aria-hidden className="flex size-11 items-center justify-center rounded-full bg-moss-soft font-mono text-[12px] tracking-[0.08em] text-moss-2">
-                AS
-              </span>
-              <span className="flex flex-col">
-                <span className="text-[15px] font-medium text-ink">{TESTIMONIAL.name}</span>
-                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-                  {TESTIMONIAL.role} · {TESTIMONIAL.context}
-                </span>
-              </span>
-            </figcaption>
-          </figure>
+                {t.more.length ? (
+                  <div className="grid grid-cols-1 gap-6 border-t border-line pt-6 md:grid-cols-2">
+                    {t.more.map((q) => (
+                      <blockquote key={q} className="text-[15px] leading-relaxed text-ink-2">
+                        “{q}”
+                      </blockquote>
+                    ))}
+                  </div>
+                ) : null}
+                <figcaption className="flex items-center gap-4">
+                  <span aria-hidden className="flex size-11 items-center justify-center rounded-full bg-moss-soft font-mono text-[12px] tracking-[0.08em] text-moss-2">
+                    {t.initials}
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-[15px] font-medium text-ink">{t.name}</span>
+                    <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">{t.role} · Early feedback, October 2026</span>
+                  </span>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       </section>
 
