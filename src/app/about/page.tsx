@@ -3,7 +3,7 @@ import { HeroFigure, SampleButton, SamplePlan } from "@/components/landing/HeroF
 import { ButtonLink, Eyebrow, Logo, SiteHeader } from "@/components/ui/kit";
 import type { Metadata } from "next";
 import { EXTERIOR_TEMPLATES, INTERIOR_TEMPLATES } from "@/lib/catalog";
-import { FAQ, SITE, structuredData } from "@/lib/site";
+import { FAQ, SITE, TESTIMONIAL, structuredData } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: { absolute: SITE.title },
@@ -133,6 +133,44 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Testimonial: an architect's own words, quoted verbatim. */}
+      <section aria-labelledby="voice-title" className="border-t border-line">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-10 px-4 py-20 md:px-8 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:gap-20">
+          <div className="flex max-w-[420px] flex-col gap-4">
+            <Eyebrow>From the field</Eyebrow>
+            <h2 id="voice-title" className="text-[30px] font-medium leading-[1.1] tracking-[-0.02em] md:text-[38px]">
+              What an architect said after trying it.
+            </h2>
+            <p className="text-[15px] leading-relaxed text-ink-2">From her written review after a first session with the studio.</p>
+          </div>
+          <figure className="flex flex-col gap-10">
+            <blockquote className="font-display text-[30px] leading-[1.18] tracking-[-0.01em] text-ink md:text-[40px]">
+              <span aria-hidden className="mr-1 text-moss">“</span>
+              {TESTIMONIAL.lead}
+              <span aria-hidden className="text-moss">”</span>
+            </blockquote>
+            <div className="grid grid-cols-1 gap-6 border-t border-line pt-6 md:grid-cols-2">
+              {TESTIMONIAL.more.map((q) => (
+                <blockquote key={q} className="text-[15px] leading-relaxed text-ink-2">
+                  “{q}”
+                </blockquote>
+              ))}
+            </div>
+            <figcaption className="flex items-center gap-4">
+              <span aria-hidden className="flex size-11 items-center justify-center rounded-full bg-moss-soft font-mono text-[12px] tracking-[0.08em] text-moss-2">
+                AS
+              </span>
+              <span className="flex flex-col">
+                <span className="text-[15px] font-medium text-ink">{TESTIMONIAL.name}</span>
+                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+                  {TESTIMONIAL.role} · {TESTIMONIAL.context}
+                </span>
+              </span>
+            </figcaption>
+          </figure>
         </div>
       </section>
 
