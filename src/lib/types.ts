@@ -179,6 +179,8 @@ export interface Project {
   generated: Design | null;
   design: Design | null;
   versions: Version[];
+  /** The client conversation the brief was read from, if one was captured. */
+  intake?: { transcript: string; source: "recording" | "upload" | "paste"; readBy: "claude" | "local"; at: number; result?: import("./intake").IntakeResult };
 }
 
 /** What a buyer link carries. Self-contained so it opens on any device. */

@@ -109,7 +109,7 @@ export default function GeneratePage() {
           </Link>
           <span className="h-5 w-px bg-line" />
           <span className="truncate text-[14px] font-medium">{brief.name}</span>
-          <span className="hidden font-mono text-[11px] uppercase tracking-[0.12em] text-muted sm:inline">Step 2 of 3 · Directions</span>
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.12em] text-muted sm:inline">Step 3 of 4 · Directions</span>
         </div>
         <Link href="/new" className="hidden items-center gap-1.5 text-[13px] text-muted transition hover:text-ink sm:inline-flex">
           <ArrowLeft size={14} /> New brief

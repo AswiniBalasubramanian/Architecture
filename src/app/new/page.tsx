@@ -111,7 +111,7 @@ export default function NewProject() {
       setStorageError(true);
       return;
     }
-    router.push(`/p/${project.id}/generate`);
+    router.push(`/p/${project.id}/intake`);
   };
 
   const section = "grid grid-cols-1 gap-x-6 gap-y-5 border-t border-line pt-8 md:grid-cols-[200px_minmax(0,1fr)]";
@@ -122,9 +122,9 @@ export default function NewProject() {
       <form onSubmit={submit} noValidate className="mx-auto grid max-w-[1400px] grid-cols-1 gap-12 px-4 pb-24 pt-10 md:px-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-10">
           <div className="af-enter flex max-w-[640px] flex-col gap-3">
-            <Eyebrow>New project · Step 1 of 3</Eyebrow>
+            <Eyebrow>New project · Step 1 of 4</Eyebrow>
             <h1 className="text-[32px] font-medium leading-[1.08] tracking-[-0.025em] md:text-[40px]">Describe the site and the brief.</h1>
-            <p className="text-[15px] leading-relaxed text-ink-2">Everything here stays editable. The next step lays out three design directions from these numbers.</p>
+            <p className="text-[15px] leading-relaxed text-ink-2">Everything here stays editable. Next, record or upload the client conversation and the brief fills in from it.</p>
           </div>
 
           <fieldset className={section}>
@@ -329,7 +329,7 @@ export default function NewProject() {
             ) : null}
             <div className="border-t border-line p-4">
               <Button type="submit" variant="primary" size="lg" className="w-full" disabled={saving}>
-                {saving ? "Saving brief…" : "Generate design directions"}
+                {saving ? "Saving brief…" : "Continue to client conversation"}
                 <ArrowRight size={16} weight="bold" />
               </Button>
               {submitted && blocking.length ? <p className="mt-2 text-center text-[12px] text-clay">Fix the highlighted fields to continue.</p> : null}
