@@ -11,6 +11,7 @@ import { useStudio } from "@/lib/store";
 import { roomDoors, roomWindows, setDoor, setWindow } from "@/lib/edit";
 import { checkPlan, type CheckStatus } from "@/lib/planCheck";
 import { checkVastu } from "@/lib/vastu";
+import { checkRules, describeRule } from "@/lib/layoutRules";
 import { FACINGS } from "@/lib/catalog";
 import type { DoorChoice, FurnitureKind, MaterialChoice, MaterialId, MaterialSlot, RoofType } from "@/lib/types";
 
@@ -244,6 +245,7 @@ function CheckPanel() {
   const brief = project.brief;
   const plan = React.useMemo(() => checkPlan(design, brief.floors), [design, brief.floors]);
   const vastu = React.useMemo(() => checkVastu(brief, design), [brief, design]);
+  const ruleChecks = React.useMemo(() => checkRules(brief, design), [brief, design]);
   const [showPass, setShowPass] = React.useState(false);
   const groups = ["Room sizes", "Light & air", "Circulation", "Structure", "Stair"] as const;
   const go = (roomId?: string) => {
@@ -292,6 +294,26 @@ function CheckPanel() {
         })}
         <p className="text-[11px] leading-relaxed text-faint">A design aid, not an approval: check local bye-laws, structure and services with your engineer.</p>
       </Section>
+      {ruleChecks.length ? (
+        <Section title="Layout rules" aside={<span className="tnum font-mono text-[11px] text-faint">{ruleChecks.filter((c) => c.score >= 1).length} of {ruleChecks.length} followed</span>}>
+          <ul className="flex flex-col divide-y divide-line rounded-xl border border-line bg-card">
+            {ruleChecks.map((c, i) => (
+              <li key={i}>
+                <button type="button" onClick={() => go(c.room?.id)} className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition hover:bg-sand/60">
+                  <i className={clsx("mt-1.5 size-2 shrink-0 rounded-full", c.score >= 1 ? "bg-moss" : c.score > 0 ? "bg-[#c99a4f]" : "bg-clay")} />
+                  <span className="flex flex-col">
+                    <span className="text-[13px] text-ink">
+                      {describeRule(c.rule)} <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-faint">{c.rule.source}</span>
+                    </span>
+                    <span className="text-[12px] leading-snug text-muted">{c.score >= 1 ? `${c.room!.name} is there.` : c.room ? `${c.room.name} is ${c.score > 0 ? "next to" : "away from"} this spot. Drag walls or swap rooms to follow it.` : "The plan has no such room."}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] leading-relaxed text-faint">From the client conversation and concept sketch.</p>
+        </Section>
+      ) : null}
       <Section title="Vastu & feng shui" aside={<span className="font-mono text-[11px] text-faint">road faces {FACINGS[brief.facing ?? "east"].toLowerCase()}</span>}>
         <div className="flex items-end gap-3">
           <span className="tnum font-display text-[38px] leading-none text-ink">{vastu.score}</span>

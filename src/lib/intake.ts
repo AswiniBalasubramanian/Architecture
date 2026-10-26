@@ -4,6 +4,7 @@
 
 import { EXTERIOR_TEMPLATES, HOUSE_TYPES, INTERIOR_TEMPLATES } from "./catalog";
 import { defaultAssumptions } from "./generator";
+import { RULE_ROOMS, rulesFromText, WHERE_IDS, type LayoutRule } from "./layoutRules";
 import type { Brief, Currency, DirectionId, Facing, HouseType, Requirement, RoofType } from "./types";
 
 export const HOUSE_TYPE_IDS = ["villa", "duplex", "contemporary", "traditional", "compact"] as const satisfies readonly HouseType[];
@@ -46,6 +47,10 @@ export interface Extraction {
   suggestions: Suggestion[];
   /** What the conversation left open: worth asking at the next meeting. */
   openQuestions: string[];
+  /** Where rooms go, from the sketch or from what was said. */
+  layoutRules: LayoutRule[];
+  /** What the sketch showed, in a sentence or two (null without a sketch). */
+  sketchSummary: string | null;
 }
 
 export type IntakeSource = "recording" | "upload" | "paste";
@@ -76,6 +81,10 @@ export function sanitize(x: Extraction): Extraction {
     bathrooms: int(x.bathrooms, 1, 6),
     budget: x.budget !== null && x.budget > 0 ? x.budget : null,
     requirements: [...new Set(x.requirements.filter((r) => (REQUIREMENT_IDS as readonly string[]).includes(r)))],
+    layoutRules: (x.layoutRules ?? [])
+      .filter((r) => (RULE_ROOMS as readonly string[]).includes(r.room) && (WHERE_IDS as readonly string[]).includes(r.where))
+      .map((r) => ({ ...r, floor: r.floor === null || r.floor === undefined ? null : Math.max(0, Math.min(2, Math.round(r.floor))) })),
+    sketchSummary: x.sketchSummary ?? null,
     suggestions: x.suggestions.filter((s) => (EXTERIOR_IDS as readonly string[]).includes(s.exterior) && (INTERIOR_IDS as readonly string[]).includes(s.interior)).slice(0, 3),
   };
 }
@@ -110,6 +119,15 @@ export function applyExtraction(brief: Brief, x: Extraction): Brief {
     next.builtUp = Math.max(400, Math.min(20000, Math.round((Math.min(zone, next.plotWidth * next.plotDepth * 0.55) * next.floors) / 50) * 50));
   }
   if (x.requirements.length) next.requirements = x.requirements;
+  if (x.layoutRules.length) {
+    next.layoutRules = x.layoutRules;
+    // A rule about a room the brief doesn't have yet asks for that room.
+    const implied: Partial<Record<LayoutRule["room"], Requirement>> = { pooja: "pooja", study: "study", parking: "parking", utility: "utility", family: "family" };
+    for (const r of x.layoutRules) {
+      const req = implied[r.room];
+      if (req && !next.requirements.includes(req)) next.requirements = [...next.requirements, req];
+    }
+  }
   if (x.notes.trim()) next.notes = [brief.notes.trim(), x.notes.trim()].filter(Boolean).join("\n");
   return next;
 }
@@ -279,6 +297,8 @@ export function readLocally(transcript: string): Extraction {
     evidence,
     suggestions: [],
     openQuestions,
+    layoutRules: rulesFromText(t),
+    sketchSummary: null,
   };
   return { ...base, suggestions: suggestFor(base, t) };
 }
@@ -308,8 +328,10 @@ export function suggestFor(x: Extraction, transcript = ""): Suggestion[] {
   const heardInterior = INTERIOR_CUES.find(([, re]) => re.test(transcript))?.[0] ?? (type === "traditional" ? "classic-teak" : "warm-minimal");
   const exterior = heardExterior ?? (type === "traditional" ? "laterite" : type === "villa" ? "lime-teak" : "elite-white");
   const narrow = x.plotWidth !== null && x.plotWidth < 32;
-  const wantsCourt = /\bcourtyard|open to sky|nadumuttam|central court\b/i.test(transcript);
-  const order: DirectionId[] = wantsCourt && !narrow ? ["courtyard", "open", "core"] : narrow ? ["open", "core", "courtyard"] : ["open", "core", "courtyard"];
+  const rules = x.layoutRules ?? [];
+  const wantsCourt = /\bcourtyard|open to sky|nadumuttam|central court\b/i.test(transcript) || rules.some((r) => r.room === "court");
+  const stairCentre = rules.some((r) => r.room === "stair" && (r.where === "middle" || r.where === "C"));
+  const order: DirectionId[] = wantsCourt && !narrow ? ["courtyard", "open", "core"] : stairCentre ? ["core", "open", "courtyard"] : ["open", "core", "courtyard"];
   const second: (typeof EXTERIOR_IDS)[number] = exterior === "elite-white" ? "white-stone" : "elite-white";
   const third: (typeof EXTERIOR_IDS)[number] = type === "traditional" || exterior === "laterite" ? "lime-teak" : exterior === "board-concrete" ? "nordic" : "lime-teak";
   const why = (dir: DirectionId) =>

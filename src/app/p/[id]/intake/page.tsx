@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowRight, Check, ClipboardText, FilePdf, Microphone, Quotes, Sparkle, Stop, UploadSimple, WarningCircle } from "@phosphor-icons/react";
+import { ArrowRight, Check, ClipboardText, FilePdf, Microphone, PencilSimpleLine, Plus, Quotes, Sparkle, Stop, UploadSimple, WarningCircle, X } from "@phosphor-icons/react";
 import { FloorPlan } from "@/components/plan/FloorPlan";
 import { ProjectMissing, ProjectSkeleton, useProject } from "@/components/ProjectGate";
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
@@ -12,6 +12,7 @@ import { Button, Eyebrow, Field, Logo, NumberInput, Segmented, Stepper, inputCla
 import { CURRENCIES, DIRECTIONS, EXTERIOR_TEMPLATES, FACINGS, HOUSE_TYPES, INTERIOR_TEMPLATES, REQUIREMENTS } from "@/lib/catalog";
 import { generate, materialsFor } from "@/lib/generator";
 import { applyExtraction, type IntakeResult, type IntakeSource, type Suggestion } from "@/lib/intake";
+import { checkRules, describeRule, PLAN_SPOTS, ROOM_LABEL, RULE_ROOMS, WHERE_LABEL, ZONES, type LayoutRule, type Where } from "@/lib/layoutRules";
 import { saveProject } from "@/lib/persist";
 import { money, sqft, withDesign } from "@/lib/projects";
 import type { Brief, Currency, Design, Facing, HouseType, Requirement } from "@/lib/types";
@@ -295,6 +296,185 @@ function Uploader({ onText }: { onText: (text: string, name: string) => void }) 
   );
 }
 
+/* ------------------------------------------------------------ sketch input */
+
+/** Longest side sent to Claude; larger images are scaled down first. */
+const SKETCH_MAX = 1568;
+
+async function sketchToJpeg(file: File): Promise<string> {
+  let source: CanvasImageSource & { width: number; height: number };
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const page = await doc.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: SKETCH_MAX / Math.max(base.width, base.height) });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    source = canvas;
+  } else {
+    source = await createImageBitmap(file);
+  }
+  const k = Math.min(1, SKETCH_MAX / Math.max(source.width, source.height));
+  const out = document.createElement("canvas");
+  out.width = Math.round(source.width * k);
+  out.height = Math.round(source.height * k);
+  const ctx = out.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(source, 0, 0, out.width, out.height);
+  return out.toDataURL("image/jpeg", 0.85);
+}
+
+function SketchInput({ sketch, onSketch }: { sketch: { dataUrl: string; name: string } | null; onSketch: (s: { dataUrl: string; name: string } | null) => void }) {
+  const [over, setOver] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const input = React.useRef<HTMLInputElement>(null);
+  const take = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      onSketch({ dataUrl: await sketchToJpeg(file), name: file.name });
+    } catch {
+      setError("That file couldn't be opened. Use a photo or scan (JPG, PNG) or a PDF of the plan.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {sketch ? (
+        <div className="relative overflow-hidden rounded-2xl border border-line bg-card">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={sketch.dataUrl} alt={`Concept sketch: ${sketch.name}`} className="max-h-[320px] w-full object-contain" />
+          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5">
+            <span className="truncate text-[12px] text-muted">{sketch.name}</span>
+            <button type="button" onClick={() => onSketch(null)} className="inline-flex items-center gap-1 text-[12px] text-muted transition hover:text-ink">
+              <X size={12} /> Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            void take(e.dataTransfer.files[0]);
+          }}
+          className={clsx("flex flex-col items-center gap-3 rounded-2xl border border-dashed px-6 py-10 text-center transition", over ? "border-moss bg-moss-soft/40" : "border-line-strong bg-card hover:bg-sand/40")}
+        >
+          <span className="flex size-11 items-center justify-center rounded-full bg-sand text-ink-2">{busy ? <span className="af-skeleton size-5 rounded-full" /> : <PencilSimpleLine size={22} />}</span>
+          <span className="text-[14px] font-medium">{busy ? "Preparing the sketch…" : "Drop a concept sketch or schematic plan"}</span>
+          <span className="max-w-[40ch] text-[12px] text-muted">A phone photo of a hand sketch, a scan, or a PDF. Label the rooms and mark the road side for the best read.</span>
+        </button>
+      )}
+      <input ref={input} type="file" accept="image/*,.pdf,application/pdf" className="sr-only" onChange={(e) => void take(e.target.files?.[0])} />
+      {error ? (
+        <p role="alert" className="text-[12px] text-clay">
+          {error}
+        </p>
+      ) : null}
+      <p className="text-[12px] leading-relaxed text-muted">The sketch is read for where each room goes. The layouts then follow those positions where the plot and planning rules allow. You can add a conversation too.</p>
+    </div>
+  );
+}
+
+const MARK = (score: number) => (score >= 1 ? { dot: "bg-moss", label: "Followed" } : score > 0 ? { dot: "bg-[#c99a4f]", label: "Close" } : { dot: "bg-clay", label: "Not met" });
+
+/** Placement rules, checked against the chosen house; editable. */
+function RulesPanel({ brief, design, onChange }: { brief: Brief; design: Design | null; onChange: (rules: LayoutRule[]) => void }) {
+  const rules = brief.layoutRules ?? [];
+  const checks = design ? checkRules(brief, design) : [];
+  const [room, setRoom] = React.useState<LayoutRule["room"]>("kitchen");
+  const [where, setWhere] = React.useState<Where>("SE");
+  const [floor, setFloor] = React.useState<string>("any");
+  const met = checks.filter((c) => c.score >= 1).length;
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-[14px] font-medium">Layout rules</span>
+        {rules.length ? <span className="tnum font-mono text-[11px] text-muted">{met} of {rules.length} followed by the selected house</span> : null}
+      </div>
+      {rules.length ? (
+        <ul className="flex flex-col divide-y divide-line">
+          {rules.map((r, i) => {
+            const c = checks[i];
+            const m = MARK(c?.score ?? 0);
+            return (
+              <li key={`${r.room}-${r.where}-${i}`} className="flex items-start gap-3 py-2.5">
+                <i className={clsx("mt-1.5 size-2 shrink-0 rounded-full", m.dot)} aria-label={m.label} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-[13px] text-ink">
+                    {describeRule(r)} <span className="ml-1 font-mono text-[10px] uppercase tracking-[0.1em] text-faint">{r.source}</span>
+                  </span>
+                  {r.quote ? <span className="line-clamp-2 text-[12px] italic leading-snug text-muted">&ldquo;{r.quote}&rdquo;</span> : null}
+                  {c && c.score < 1 ? <span className="text-[12px] leading-snug text-muted">{c.room ? `${c.room.name} landed ${c.score > 0 ? "next to" : "away from"} this spot; the plot or the planning rules kept it there.` : "This plan has no such room yet."}</span> : null}
+                </span>
+                <button type="button" aria-label={`Remove rule: ${describeRule(r)}`} onClick={() => onChange(rules.filter((_, j) => j !== i))} className="text-muted transition hover:text-ink">
+                  <X size={14} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-[12px] leading-relaxed text-muted">No placements were stated. Add one here, or upload a sketch, and the layouts will follow it where they can.</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+        <select aria-label="Room" className={clsx(inputClass, "h-9 w-auto text-[13px]")} value={room} onChange={(e) => setRoom(e.target.value as LayoutRule["room"])}>
+          {RULE_ROOMS.map((r) => (
+            <option key={r} value={r}>
+              {ROOM_LABEL[r]}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Position" className={clsx(inputClass, "h-9 w-auto text-[13px]")} value={where} onChange={(e) => setWhere(e.target.value as Where)}>
+          <optgroup label="Compass">
+            {ZONES.map((z) => (
+              <option key={z} value={z}>
+                {WHERE_LABEL[z]}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="From the road">
+            {PLAN_SPOTS.map((p) => (
+              <option key={p} value={p}>
+                {WHERE_LABEL[p]}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+        <select aria-label="Floor" className={clsx(inputClass, "h-9 w-auto text-[13px]")} value={floor} onChange={(e) => setFloor(e.target.value)}>
+          <option value="any">Any floor</option>
+          {Array.from({ length: brief.floors }, (_, i) => (
+            <option key={i} value={i}>
+              {i === 0 ? "Ground floor" : i === 1 ? "First floor" : "Second floor"}
+            </option>
+          ))}
+        </select>
+        <Button type="button" size="sm" onClick={() => onChange([...rules, { room, where, floor: floor === "any" ? null : Number(floor), source: "architect" }])}>
+          <Plus size={12} weight="bold" /> Add rule
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- results */
 
 const FIELD_LABEL: Record<string, string> = {
@@ -332,7 +512,8 @@ export default function IntakePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [{ status, project }] = useProject(id);
-  const [tab, setTab] = React.useState<IntakeSource>("recording");
+  const [tab, setTab] = React.useState<IntakeSource | "sketch">("recording");
+  const [sketch, setSketch] = React.useState<{ dataUrl: string; name: string } | null>(null);
   const [transcript, setTranscript] = React.useState("");
   const [source, setSource] = React.useState<IntakeSource>("recording");
   const [fileName, setFileName] = React.useState<string | null>(null);
@@ -355,6 +536,7 @@ export default function IntakePage() {
       setTranscript(project.intake.transcript);
       setSource(project.intake.source);
       setTab(project.intake.source);
+      if (project.intake.sketch) setSketch(project.intake.sketch);
       if (project.intake.result) {
         setResult(project.intake.result);
         setBrief(applyExtraction(project.brief, project.intake.result.extraction));
@@ -363,7 +545,9 @@ export default function IntakePage() {
   }, [project]);
 
   const suggestions = result?.extraction.suggestions ?? [];
-  const chosen = React.useMemo(() => (brief && suggestions[pick] ? designFor(brief, suggestions[pick]!) : null), [brief, suggestions, pick]);
+  const briefLater = React.useDeferredValue(brief);
+  const built = React.useMemo(() => (briefLater ? suggestions.map((s) => designFor(briefLater, s)) : []), [briefLater, suggestions]);
+  const chosen = built[pick] ?? null;
 
   if (status === "loading") return <ProjectSkeleton />;
   if (status === "missing" || !project) return <ProjectMissing />;
@@ -375,13 +559,13 @@ export default function IntakePage() {
     setReading(true);
     setReadError(null);
     try {
-      const res = await fetch("/api/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transcript }) });
+      const res = await fetch("/api/intake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transcript, image: sketch ? { data: sketch.dataUrl.split(",")[1], media_type: "image/jpeg" } : undefined }) });
       const data = (await res.json()) as IntakeResult & { error?: string };
       if (!res.ok || data.error) throw new Error(data.error ?? "The brief couldn't be read.");
       setResult(data);
       setBrief(applyExtraction(project.brief, data.extraction));
       setPick(0);
-      saveProject({ ...project, intake: { transcript, source, readBy: data.readBy, at: Date.now(), result: data }, updatedAt: Date.now() });
+      saveProject({ ...project, intake: { transcript, source, readBy: data.readBy, at: Date.now(), result: data, sketch: sketch ?? undefined }, updatedAt: Date.now() });
       requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (e) {
       setReadError(e instanceof Error ? e.message : "The brief couldn't be read.");
@@ -393,7 +577,7 @@ export default function IntakePage() {
   const set = <K extends keyof Brief>(k: K, v: Brief[K]) => setBrief((b) => (b ? { ...b, [k]: v } : b));
   const toggleReq = (r: Requirement) => setBrief((b) => (b ? { ...b, requirements: b.requirements.includes(r) ? b.requirements.filter((x) => x !== r) : [...b.requirements, r] } : b));
 
-  const intake = { transcript, source, readBy: result?.readBy ?? ("local" as const), at: Date.now(), result: result ?? undefined };
+  const intake = { transcript, source, readBy: result?.readBy ?? ("local" as const), at: Date.now(), result: result ?? undefined, sketch: sketch ?? undefined };
   const openStudio = () => {
     if (!chosen) return;
     setSaving(true);
@@ -441,11 +625,12 @@ export default function IntakePage() {
           <Segmented
             label="How to capture the conversation"
             value={tab}
-            onChange={(v: IntakeSource) => setTab(v)}
+            onChange={(v: IntakeSource | "sketch") => setTab(v)}
             options={[
               { value: "recording", label: <><Microphone size={14} /> Record</> },
               { value: "upload", label: <><UploadSimple size={14} /> Upload</> },
               { value: "paste", label: <><ClipboardText size={14} /> Paste</> },
+              { value: "sketch", label: <><PencilSimpleLine size={14} /> Sketch{sketch ? " ·1" : ""}</> },
             ]}
           />
 
@@ -458,6 +643,7 @@ export default function IntakePage() {
               }}
             />
           ) : null}
+          {tab === "sketch" ? <SketchInput sketch={sketch} onSketch={setSketch} /> : null}
           {tab === "upload" ? (
             <Uploader
               onText={(t, name) => {
@@ -483,7 +669,7 @@ export default function IntakePage() {
           </Field>
 
           <div className="flex flex-col gap-2">
-            <Button type="button" variant="primary" size="lg" onClick={read} disabled={reading || words < 5}>
+            <Button type="button" variant="primary" size="lg" onClick={read} disabled={reading || (words < 5 && !sketch)}>
               {reading ? (
                 <>
                   <span className="af-skeleton size-4 rounded-full" /> Reading the conversation…
@@ -629,6 +815,19 @@ export default function IntakePage() {
                     </ol>
                   </div>
                 ) : null}
+
+                {x.sketchSummary ? (
+                  <div className="flex gap-4 rounded-2xl border border-line p-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {sketch ? <img src={sketch.dataUrl} alt="" className="h-20 w-20 shrink-0 rounded-lg border border-line object-cover" /> : null}
+                    <span className="flex flex-col gap-1">
+                      <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted">From the sketch</span>
+                      <span className="text-[13px] leading-relaxed text-ink-2">{x.sketchSummary}</span>
+                    </span>
+                  </div>
+                ) : null}
+
+                <RulesPanel brief={brief} design={chosen?.design ?? null} onChange={(rules) => set("layoutRules", rules)} />
               </div>
 
               {/* Suggested houses */}
@@ -656,7 +855,10 @@ export default function IntakePage() {
                 <div role="radiogroup" aria-label="Suggested houses" className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   {suggestions.map((s, i) => {
                     const on = i === pick;
-                    const d = designFor(brief, s);
+                    const d = built[i];
+                    if (!d) return null;
+                    const rc = checkRules(d.brief, d.design);
+                    const metCount = rc.filter((c) => c.score >= 1).length;
                     return (
                       <button
                         key={`${s.direction}-${s.exterior}-${i}`}
@@ -675,6 +877,7 @@ export default function IntakePage() {
                             <span className={clsx("flex size-4 shrink-0 items-center justify-center rounded-full border", on ? "border-ink bg-ink text-paper" : "border-line-strong")}>{on ? <Check size={10} weight="bold" /> : null}</span>
                           </span>
                           <span className="text-[12px] leading-snug text-muted">{s.why}</span>
+                          {rc.length ? <span className={clsx("tnum self-start rounded-full px-2 py-0.5 text-[11px]", metCount === rc.length ? "bg-moss-soft text-moss-2" : "bg-sand text-ink-2")}>Follows {metCount} of {rc.length} layout rules</span> : null}
                           <span className="mt-auto flex items-center justify-between gap-2 pt-2">
                             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-faint">
                               {DIRECTIONS[s.direction].label} · {EXTERIOR_TEMPLATES.find((t) => t.id === s.exterior)?.label} · {INTERIOR_TEMPLATES.find((t) => t.id === s.interior)?.label}

@@ -32,6 +32,8 @@ export interface Brief {
   facing?: Facing;
   /** Roof preference; "auto" follows the house type. */
   roof?: RoofType | "auto";
+  /** Placement rules from a sketch, the conversation or the architect; the generator follows them where it can. */
+  layoutRules?: import("./layoutRules").LayoutRule[];
 }
 
 export interface Assumptions {
@@ -180,7 +182,7 @@ export interface Project {
   design: Design | null;
   versions: Version[];
   /** The client conversation the brief was read from, if one was captured. */
-  intake?: { transcript: string; source: "recording" | "upload" | "paste"; readBy: "claude" | "local"; at: number; result?: import("./intake").IntakeResult };
+  intake?: { transcript: string; source: "recording" | "upload" | "paste"; readBy: "claude" | "local"; at: number; result?: import("./intake").IntakeResult; sketch?: { dataUrl: string; name: string } };
 }
 
 /** What a buyer link carries. Self-contained so it opens on any device. */

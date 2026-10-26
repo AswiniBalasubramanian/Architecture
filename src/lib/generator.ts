@@ -5,6 +5,7 @@
 import { EXTERIOR_TEMPLATES, FURNITURE, HOUSE_TYPES, INTERIOR_TEMPLATES } from "./catalog";
 import { checkPlan } from "./planCheck";
 import { checkVastu } from "./vastu";
+import { checkRules, rulesScore } from "./layoutRules";
 import type { Assumptions, Brief, Design, DirectionId, Furniture, FurnitureKind, MaterialChoice, MaterialSlot, RoofType, Room, RoomType } from "./types";
 
 const half = (value: number) => Math.round(value * 2) / 2;
@@ -478,10 +479,13 @@ function roofFor(brief: Brief, direction: DirectionId): RoofType {
   return base;
 }
 
-/** How good a layout is: the plan check, plus Vastu when the brief asks for it. */
+/** How good a layout is: the plan check, plus Vastu when the brief asks for it, plus any stated placement rules. */
 export function scoreDesign(brief: Brief, design: Design) {
   const plan = checkPlan(design, brief.floors).score;
-  return brief.requirements.includes("vastu") ? plan * 0.5 + checkVastu(brief, design).score * 0.5 : plan;
+  const base = brief.requirements.includes("vastu") ? plan * 0.5 + checkVastu(brief, design).score * 0.5 : plan;
+  const rules = rulesScore(brief, design);
+  // Rules the architect or client stated outweigh the generic checks.
+  return rules === null ? base : base * 0.4 + rules * 0.6;
 }
 
 /**
@@ -508,7 +512,7 @@ export function generate(brief: Brief, direction: DirectionId, variant?: number)
   let { exterior, interior } = DIRECTION_TEMPLATES[direction];
   if (brief.houseType === "traditional") exterior = "laterite";
   if (brief.houseType === "villa" && direction !== "open") exterior = "lime-teak";
-  return {
+  const design: Design = {
     direction,
     roof: roofFor(brief, direction),
     footprint: { x: fp.x, y: fp.y, w: fp.w, d: fp.d },
@@ -521,6 +525,52 @@ export function generate(brief: Brief, direction: DirectionId, variant?: number)
     interiorTemplate: interior,
     variant: variant % VARIANTS.length,
   };
+  return brief.layoutRules?.length ? followRules(brief, design) : design;
+}
+
+/** Rooms that can trade places with each other without breaking circulation or services. */
+const SWAPPABLE = new Set<RoomType>(["living", "dining", "kitchen", "bedroom", "master", "study", "family", "pooja", "utility"]);
+
+/**
+ * Trade the places of two rooms on the same floor (their names and uses swap;
+ * the walls stay), keeping each trade only when it follows the stated rules
+ * better without the plan check getting worse. Tiling and stairs are untouched.
+ */
+export function followRules(brief: Brief, design: Design): Design {
+  let cur = design;
+  let curScore = scoreDesign(brief, cur);
+  let curPlan = checkPlan(cur, brief.floors).score;
+  for (let pass = 0; pass < 4; pass++) {
+    const misses = checkRules(brief, cur).filter((c) => c.score < 1 && c.room && SWAPPABLE.has(c.room.type));
+    if (!misses.length) break;
+    let improved = false;
+    for (const miss of misses) {
+      const a = cur.rooms.find((r) => r.id === miss.room!.id)!;
+      let best: { design: Design; score: number; plan: number } | null = null;
+      for (const b of cur.rooms) {
+        if (b.id === a.id || b.floor !== a.floor || !SWAPPABLE.has(b.type) || b.type === a.type) continue;
+        // A room must still meet its minimum size in its new place.
+        if ((MIN_AREA[a.type] ?? 0) > b.w * b.d || (MIN_AREA[b.type] ?? 0) > a.w * a.d) continue;
+        if (Math.min(b.w, b.d) < 6 || Math.min(a.w, a.d) < 6) continue;
+        const rooms = cur.rooms.map((r) => (r.id === a.id ? { ...r, type: b.type, name: b.name } : r.id === b.id ? { ...r, type: a.type, name: a.name } : r));
+        const moved = rooms.filter((r) => r.id === a.id || r.id === b.id);
+        const furniture = [...cur.furniture.filter((it) => !moved.some((r) => r.floor === it.floor && it.x > r.x && it.x < r.x + r.w && it.y > r.y && it.y < r.y + r.d)), ...moved.flatMap(furnish)];
+        const next = { ...cur, rooms, furniture };
+        const plan = checkPlan(next, brief.floors).score;
+        if (plan < curPlan - 2) continue;
+        const score = scoreDesign(brief, next);
+        if (score > curScore + 0.5 && (!best || score > best.score)) best = { design: next, score, plan };
+      }
+      if (best) {
+        cur = best.design;
+        curScore = best.score;
+        curPlan = best.plan;
+        improved = true;
+      }
+    }
+    if (!improved) break;
+  }
+  return cur;
 }
 
 export interface DesignStats {
