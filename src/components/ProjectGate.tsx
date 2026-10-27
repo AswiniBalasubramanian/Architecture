@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { loadProject } from "@/lib/persist";
 import type { Project } from "@/lib/types";
 import { buttonClass, Logo } from "./ui/kit";
+import { PixelLoader } from "./ui/PixelLoader";
 
 /** The prerendered shell every /p/<id>/... URL is served from (see src/app/p/[id]/layout.tsx). */
 const SHELL = "_";
@@ -33,21 +34,7 @@ export function useProject(id: string) {
 }
 
 export function ProjectSkeleton() {
-  return (
-    <div className="flex min-h-[100dvh] flex-col" role="status" aria-label="Loading project">
-      <div className="flex h-14 items-center border-b border-line px-4 md:px-8">
-        <Logo />
-      </div>
-      <div className="grid flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[300px_1fr]">
-        <div className="flex flex-col gap-3">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="af-skeleton h-16 rounded-xl" />
-          ))}
-        </div>
-        <div className="af-skeleton min-h-[420px] rounded-2xl" />
-      </div>
-    </div>
-  );
+  return <PixelLoader fullScreen label="Opening the project" />;
 }
 
 export function ProjectMissing() {

@@ -1,16 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { PixelLoader } from "../ui/PixelLoader";
 
 /** Three.js is ~600 kB; load it only where a 3D view is on screen. */
 export const LazyHouseScene = dynamic(() => import("./HouseScene").then((m) => m.HouseScene), {
   ssr: false,
-  loading: () => (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-3 af-grid" role="status" aria-live="polite">
-      <div className="af-skeleton h-1 w-40 rounded-full" />
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Loading 3D model</p>
-    </div>
-  ),
+  loading: () => <PixelLoader label="Loading 3D model" className="af-grid" />,
 });
 
 export function webglAvailable() {

@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { furnish, materialsFor, place } from "./generator";
 import { EXTERIOR_TEMPLATES, INTERIOR_TEMPLATES } from "./catalog";
 import { newId, saveProject } from "./persist";
-import type { Design, Furniture, FurnitureKind, Lighting, MaterialChoice, MaterialSlot, Project, Room } from "./types";
+import type { Brief, Design, Furniture, FurnitureKind, Lighting, MaterialChoice, MaterialSlot, Project, Room } from "./types";
 
 export type ViewMode = "plan" | "3d" | "split";
 
@@ -30,6 +30,8 @@ interface StudioState {
   setFloor(floor: number): void;
   setView(view: ViewMode): void;
   setCutaway(on: boolean): void;
+  /** Change the brief (from the command bar); saved with the project. */
+  setBrief(brief: Brief): void;
   select(selection: Partial<Selection>): void;
 
   /** Every design change goes through commit so it can be undone. */
@@ -76,7 +78,8 @@ export const useStudio = create<StudioState>((set, get) => {
     saveError: false,
     floor: 0,
     view: "split",
-    cutaway: true,
+    // Open on the whole house with its roof; cutaway is one click away.
+    cutaway: false,
     selection: { roomId: null, furnitureId: null },
 
     open(project) {
@@ -90,6 +93,10 @@ export const useStudio = create<StudioState>((set, get) => {
     },
     setCutaway(cutaway) {
       set({ cutaway });
+    },
+    setBrief(brief) {
+      const { project } = get();
+      if (project) set({ project: { ...project, brief }, dirty: true });
     },
     select(selection) {
       set({ selection: { ...get().selection, ...selection } });

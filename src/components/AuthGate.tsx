@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { SignOut } from "@phosphor-icons/react";
 import { clearSession, homeFor, useSession, type Role } from "@/lib/session";
 import { buttonClass, Logo } from "./ui/kit";
+import { PixelLoader } from "./ui/PixelLoader";
 
 /** Renders children only for a signed-in user with an allowed role; otherwise routes to sign-in. */
 export function RequireRole({ allow, hint, children }: { allow: Role[]; hint?: Role; children: React.ReactNode }) {
@@ -18,11 +19,7 @@ export function RequireRole({ allow, hint, children }: { allow: Role[]; hint?: R
     }
   }, [session, router, allow, hint]);
   if (session === undefined || session === null) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center" role="status" aria-label="Checking sign-in">
-        <div className="af-skeleton h-1 w-32 rounded-full" />
-      </div>
-    );
+    return <PixelLoader fullScreen label={session === null ? "Taking you to sign in" : "Opening your studio"} />;
   }
   if (!allow.includes(session.role)) {
     return (

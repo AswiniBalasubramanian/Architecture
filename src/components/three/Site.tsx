@@ -370,7 +370,7 @@ export function sunAt(hour: number) {
   return { dir, up, night, golden };
 }
 
-export function Lights({ hour, night }: { hour: number; night: boolean }) {
+export function Lights({ hour, night, shadowSize = 4096 }: { hour: number; night: boolean; shadowSize?: number }) {
   const sun = sunAt(hour);
   const pos = (night ? MOON : sun.dir).clone().multiplyScalar(160);
   const ref = React.useRef<THREE.DirectionalLight>(null);
@@ -386,12 +386,22 @@ export function Lights({ hour, night }: { hour: number; night: boolean }) {
     cam.far = 420;
     cam.updateProjectionMatrix();
   }, []);
+  // A new map size takes effect only once the old shadow map is released.
+  const lastSize = React.useRef(shadowSize);
+  React.useEffect(() => {
+    const light = ref.current;
+    if (!light || lastSize.current === shadowSize) return;
+    lastSize.current = shadowSize;
+    light.shadow.mapSize.set(shadowSize, shadowSize);
+    light.shadow.map?.dispose();
+    light.shadow.map = null;
+  }, [shadowSize]);
   const color = sun.golden ? "#ffcf9a" : "#fff4e2";
   const intensity = night ? 0.62 : 0.7 + Math.max(0, sun.up) * 2.6;
   return (
     <>
       <hemisphereLight args={[night ? "#5d73a3" : "#f2eee4", night ? "#1a1d24" : "#9c9480", night ? 0.5 : 0.55]} />
-      <directionalLight ref={ref} position={pos} intensity={intensity} color={night ? "#b6c7ea" : color} castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096} shadow-bias={-0.0006} shadow-normalBias={0.09} shadow-radius={4} />
+      <directionalLight ref={ref} position={pos} intensity={intensity} color={night ? "#b6c7ea" : color} castShadow shadow-mapSize-width={shadowSize} shadow-mapSize-height={shadowSize} shadow-bias={-0.0006} shadow-normalBias={0.09} shadow-radius={4} />
       {night ? null : <Sky sunPosition={[sun.dir.x, Math.max(sun.up, night ? -0.08 : 0.02), sun.dir.z]} turbidity={night ? 2 : 5} rayleigh={night ? 0.3 : sun.golden ? 2.2 : 1.1} mieCoefficient={0.004} mieDirectionalG={0.82} distance={4500} />}
       {/* Studio reflections built from light panels, so nothing is downloaded. */}
       <Environment resolution={256} frames={1} environmentIntensity={night ? 0.32 : 0.6}>

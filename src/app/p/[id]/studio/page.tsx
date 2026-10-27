@@ -3,10 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { ArrowArcLeft, ArrowArcRight, ArrowCounterClockwise, Check, Copy, Eye, FloppyDisk, Scissors, ShareNetwork, X, PersonSimpleWalk } from "@phosphor-icons/react";
+import { ArrowArcLeft, ArrowArcRight, ArrowCounterClockwise, Check, Copy, Eye, FloppyDisk, Scissors, ShareNetwork, X, PersonSimpleWalk, HouseLine } from "@phosphor-icons/react";
 import { FloorPlan } from "@/components/plan/FloorPlan";
 import { ProjectMissing, ProjectSkeleton, useProject, useProjectId } from "@/components/ProjectGate";
 import { Properties } from "@/components/studio/Properties";
+import { CommandBar } from "@/components/studio/CommandBar";
 import { UserMenu } from "@/components/AuthGate";
 import type { CameraPreset, SceneHandle, Tour } from "@/components/three/HouseScene";
 import { Walkthrough } from "@/components/Walkthrough";
@@ -283,8 +284,9 @@ export default function StudioPage() {
           </div>
         </nav>
 
-        {/* Canvas */}
-        <main className={clsx("relative grid min-h-[56dvh] min-w-0 flex-1", view === "split" ? "grid-rows-2 xl:grid-cols-2 xl:grid-rows-1" : "grid-cols-1")}>
+        {/* Canvas, with the command bar under it */}
+        <div className="flex min-h-[56dvh] min-w-0 flex-1 flex-col">
+        <main className={clsx("relative grid min-h-0 min-w-0 flex-1", view === "split" ? "grid-rows-2 xl:grid-cols-2 xl:grid-rows-1" : "grid-cols-1")}>
           {showPlan ? (
             <section aria-label="Floor plan" className="af-grid relative min-h-0 overflow-hidden border-line xl:border-r">
               <div className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-xl border border-line bg-card/95 p-1 shadow-[var(--shadow-lift)] backdrop-blur lg:hidden">
@@ -349,9 +351,22 @@ export default function StudioPage() {
                       </button>
                     ))}
                     <span className="mx-0.5 h-4 w-px bg-line" />
-                    <IconButton label={s.cutaway ? `Cutaway: showing up to ${floorName(s.floor)}` : "Cutaway off: full house with roof"} active={s.cutaway} onClick={() => s.setCutaway(!s.cutaway)}>
-                      <Scissors size={15} />
-                    </IconButton>
+                    <div role="radiogroup" aria-label="3D view" className="flex rounded-lg bg-sand p-0.5">
+                      {([false, true] as const).map((cut) => (
+                        <button
+                          key={String(cut)}
+                          type="button"
+                          role="radio"
+                          aria-checked={s.cutaway === cut}
+                          title={cut ? `Cut away above ${floorName(s.floor)} to see the rooms` : "The whole house with its roof"}
+                          onClick={() => s.setCutaway(cut)}
+                          className={clsx("inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] transition", s.cutaway === cut ? "bg-card text-ink shadow-[var(--shadow-lift)]" : "text-muted hover:text-ink")}
+                        >
+                          {cut ? <Scissors size={12} /> : <HouseLine size={12} />}
+                          {cut ? "Cutaway" : "Whole house"}
+                        </button>
+                      ))}
+                    </div>
                     <IconButton
                       label={walking ? "Stop walkthrough" : "Cinematic walkthrough"}
                       active={walking}
@@ -380,6 +395,8 @@ export default function StudioPage() {
             </div>
           ) : null}
         </main>
+        <CommandBar onToast={flash} />
+        </div>
 
         {/* Properties */}
         <aside aria-label="Properties" className="max-h-[50dvh] w-full shrink-0 overflow-y-auto border-t border-line bg-paper lg:max-h-none lg:w-[320px] lg:border-l lg:border-t-0">

@@ -252,3 +252,30 @@ input[type="range"].af-range::-webkit-slider-thumb {
     animation: none;
   }
 }
+
+/* Pixel mark loader: each pixel lights in drawing order, holds, and fades. */
+@keyframes af-px {
+  0% {
+    opacity: 0.08;
+    transform: scale(0.55);
+  }
+  18%,
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.08;
+    transform: scale(0.55);
+  }
+}
+.af-px {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: af-px 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-px {
+    animation: none;
+  }
+}

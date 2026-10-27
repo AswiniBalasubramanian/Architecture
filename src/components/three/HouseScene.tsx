@@ -217,9 +217,11 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
   // The walkthrough drives the camera after the orbit controls have updated.
   const pose = React.useMemo(() => ({ p: new THREE.Vector3(), yaw: 0, pitch: 0, fov: FOV }), []);
   const ahead = React.useMemo(() => new THREE.Vector3(), []);
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const s = tour.current;
     if (!s.tour) return;
+    // The canvas renders on demand; the walkthrough asks for the next frame itself.
+    state.invalidate();
     const dt = Math.min(delta, 0.1);
     if (s.playing) {
       s.t += dt;
@@ -276,7 +278,10 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
     if (!c || !autoRotate) return;
     let frame = 0;
     const spin = () => {
-      if (!tour.current.tour) c.azimuthAngle += 0.0016;
+      if (!tour.current.tour) {
+        c.azimuthAngle += 0.0016;
+        invalidate();
+      }
       frame = requestAnimationFrame(spin);
     };
     frame = requestAnimationFrame(spin);
@@ -286,10 +291,98 @@ const Controller = React.forwardRef<SceneHandle, { brief: Brief; design: Design;
       stop();
       c.removeEventListener("controlstart", stop);
     };
-  }, [autoRotate]);
+  }, [autoRotate, invalidate]);
 
   return <CameraControls ref={controls} makeDefault maxPolarAngle={Math.PI / 2 - 0.04} minDistance={4} maxDistance={360} smoothTime={0.35} dollyToCursor />;
 });
+
+/**
+ * Rendering quality. 2 is full (4096 shadows, ambient occlusion, bloom, 1.5x
+ * pixels); 1 halves the costly passes; 0 is for slow machines. The scene starts
+ * from a guess based on the device and moves with the measured frame rate.
+ */
+type Tier = 0 | 1 | 2;
+const TIERS: Record<Tier, { dpr: number; shadow: number; ao: boolean; bloom: boolean }> = {
+  2: { dpr: 1.5, shadow: 4096, ao: true, bloom: true },
+  1: { dpr: 1.15, shadow: 2048, ao: true, bloom: false },
+  0: { dpr: 1, shadow: 1024, ao: false, bloom: false },
+};
+function startTier(): Tier {
+  if (typeof navigator === "undefined") return 2;
+  // ?q=0|1|2 pins a tier, for comparing quality and speed.
+  const pinned = Number(new URLSearchParams(window.location.search).get("q"));
+  if (pinned === 0 || pinned === 1 || pinned === 2) return pinned as Tier;
+  const cores = navigator.hardwareConcurrency ?? 8;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+  const touch = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+  if (cores <= 4 || memory <= 4) return touch ? 0 : 1;
+  return touch ? 1 : 2;
+}
+
+/**
+ * Steps quality down when continuous frames run under ~40 fps and back up after
+ * a long run above ~57. Gaps between frames (the canvas idles on demand) are
+ * ignored, so a still scene is never mistaken for a slow one.
+ */
+function AdaptiveQuality({ onDecline, onIncline }: { onDecline: () => void; onIncline: () => void }) {
+  const samples = React.useRef<number[]>([]);
+  const good = React.useRef(0);
+  const cooldown = React.useRef(0);
+  useFrame((_, delta) => {
+    if (delta > 0.25) return;
+    if (cooldown.current > 0) {
+      cooldown.current--;
+      return;
+    }
+    const list = samples.current;
+    list.push(delta);
+    if (list.length < 45) return;
+    const fps = list.length / list.reduce((a, b) => a + b, 0);
+    samples.current = [];
+    if (fps < 40) {
+      good.current = 0;
+      cooldown.current = 30; // let the cheaper settings settle before measuring again
+      onDecline();
+    } else if (fps > 57 && ++good.current >= 4) {
+      good.current = 0;
+      cooldown.current = 30;
+      onIncline();
+    }
+  });
+  return null;
+}
+
+/**
+ * Shadows are drawn only when something that casts them changes (the design,
+ * the sun, the cut, the quality) and while the camera tour moves the door, not
+ * on every frame; a 4096 shadow map is the costliest pass in the scene.
+ */
+function ShadowUpdates({ deps, live }: { deps: unknown[]; live: boolean }) {
+  const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
+  const frames = React.useRef(0);
+  React.useEffect(() => {
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    return () => {
+      gl.shadowMap.autoUpdate = true;
+    };
+  }, [gl]);
+  React.useEffect(() => {
+    // A few frames, so geometry that mounts a frame late is caught too.
+    frames.current = 3;
+    invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  useFrame(() => {
+    if (live || frames.current > 0) {
+      gl.shadowMap.needsUpdate = true;
+      frames.current = Math.max(0, frames.current - 1);
+      if (frames.current > 0) invalidate();
+    }
+  });
+  return null;
+}
 
 export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseScene(
   { brief, design, maxFloor, cutaway = false, selectedRoom, selectedFurniture, onSelectRoom, onSelectFurniture, intro = false, className, onReady, autoRotate = false, onTourEnd, hour: hourOverride },
@@ -301,11 +394,19 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
   // Interiors are shown lit during the walkthrough, as they would be photographed.
   const lit = night || design.lighting.interior || touring;
   const bg = night ? "#141a2a" : "#e9e5dc";
+  const [tier, setTier] = React.useState<Tier>(2);
+  const [adaptive, setAdaptive] = React.useState(true);
+  React.useEffect(() => {
+    setTier(startTier());
+    setAdaptive(!new URLSearchParams(window.location.search).has("q"));
+  }, []);
+  const q = TIERS[tier];
   return (
     <div className={className}>
       <Canvas
         shadows
-        dpr={[1, 1.5]}
+        frameloop="demand"
+        dpr={q.dpr}
         camera={{ fov: FOV, near: 0.1, far: 2400, position: [80, 60, 80] }}
         gl={{ antialias: false, stencil: false, powerPreference: "high-performance" }}
         onCreated={({ gl }) => {
@@ -318,9 +419,12 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
           onSelectFurniture?.(null);
         }}
       >
+        {/* Steps quality down when frames drop below ~40 fps, and back up when there is headroom. */}
+        {adaptive ? <AdaptiveQuality onDecline={() => setTier((t) => (t > 0 ? ((t - 1) as Tier) : t))} onIncline={() => setTier((t) => (t < 2 ? ((t + 1) as Tier) : t))} /> : null}
+        <ShadowUpdates deps={[design, hour, maxFloor, cutaway, tier, lit]} live={touring} />
         <color attach="background" args={[bg]} />
         <fog attach="fog" args={[night ? "#1f2536" : "#e9e5dc", night ? 170 : 220, night ? 680 : 620]} />
-        <Lights hour={hour} night={night} />
+        <Lights hour={hour} night={night} shadowSize={q.shadow} />
         {night ? <NightSky /> : null}
         <Site brief={brief} design={design} lit={lit} night={night} />
         <HouseModel
@@ -337,8 +441,9 @@ export const HouseScene = React.forwardRef<SceneHandle, Props>(function HouseSce
           entryOpen={touring}
         />
         <EffectComposer multisampling={0} enableNormalPass={false}>
-          <N8AO aoRadius={2.4} distanceFalloff={1} intensity={night ? 1.8 : 2.1} quality="medium" halfRes />
-          <Bloom luminanceThreshold={night ? 0.7 : 1.05} luminanceSmoothing={0.25} intensity={night ? 1.25 : 0.3} radius={0.8} mipmapBlur />
+          {q.ao ? <N8AO aoRadius={2.4} distanceFalloff={1} intensity={night ? 1.8 : 2.1} quality={tier === 2 ? "medium" : "low"} halfRes /> : <></>}
+          {/* Night keeps bloom at every tier: the lights are the picture. */}
+          {q.bloom || night ? <Bloom luminanceThreshold={night ? 0.7 : 1.05} luminanceSmoothing={0.25} intensity={night ? 1.25 : 0.3} radius={0.8} mipmapBlur /> : <></>}
           <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
           {/* A light grade toward a rendered-photo look: warmer, slightly richer. */}
           <HueSaturation saturation={night ? 0.06 : golden ? 0.12 : 0.1} hue={0} />
