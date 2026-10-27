@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Cube, PencilSimpleLine, Sun, Wrench } from "@phosphor-icons/react";
 import { BuildFigure } from "@/components/build/BuildFigure";
 import type { BuildScene } from "@/components/build/geometry";
 import { FloorPlan } from "@/components/plan/FloorPlan";
-import { ProjectMissing, ProjectSkeleton, useProject } from "@/components/ProjectGate";
+import { ProjectMissing, ProjectSkeleton, useProject, useProjectId } from "@/components/ProjectGate";
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
 import { Button, Eyebrow, Logo, Segmented } from "@/components/ui/kit";
 import { DIRECTIONS, HOUSE_TYPES, floorName } from "@/lib/catalog";
@@ -27,7 +27,7 @@ const PIPELINE = [
 ] as const;
 
 export default function GeneratePage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useProjectId();
   const router = useRouter();
   const [{ status, project }] = useProject(id);
   const [direction, setDirection] = React.useState<DirectionId>("open");

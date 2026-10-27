@@ -2,11 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import clsx from "clsx";
 import { ArrowArcLeft, ArrowArcRight, ArrowCounterClockwise, Check, Copy, Eye, FloppyDisk, Scissors, ShareNetwork, X, PersonSimpleWalk } from "@phosphor-icons/react";
 import { FloorPlan } from "@/components/plan/FloorPlan";
-import { ProjectMissing, ProjectSkeleton, useProject } from "@/components/ProjectGate";
+import { ProjectMissing, ProjectSkeleton, useProject, useProjectId } from "@/components/ProjectGate";
 import { Properties } from "@/components/studio/Properties";
 import { UserMenu } from "@/components/AuthGate";
 import type { CameraPreset, SceneHandle, Tour } from "@/components/three/HouseScene";
@@ -81,7 +80,7 @@ function ShareDialog({ onClose }: { onClose: () => void }) {
 }
 
 export default function StudioPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useProjectId();
   const [{ status, project: loaded }] = useProject(id);
   const s = useStudio();
   const scene = React.useRef<SceneHandle>(null);

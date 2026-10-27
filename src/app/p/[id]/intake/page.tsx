@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ArrowRight, Check, ClipboardText, FilePdf, Microphone, PencilSimpleLine, Plus, Quotes, Sparkle, Stop, UploadSimple, WarningCircle, X } from "@phosphor-icons/react";
 import { FloorPlan } from "@/components/plan/FloorPlan";
-import { ProjectMissing, ProjectSkeleton, useProject } from "@/components/ProjectGate";
+import { ProjectMissing, ProjectSkeleton, useProject, useProjectId } from "@/components/ProjectGate";
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
 import { Button, Eyebrow, Field, Logo, NumberInput, Segmented, Stepper, inputClass } from "@/components/ui/kit";
 import { CURRENCIES, DIRECTIONS, EXTERIOR_TEMPLATES, FACINGS, HOUSE_TYPES, INTERIOR_TEMPLATES, REQUIREMENTS } from "@/lib/catalog";
@@ -509,7 +509,7 @@ function Swatches({ s }: { s: Suggestion }) {
 /* ------------------------------------------------------------------- page */
 
 export default function IntakePage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useProjectId();
   const router = useRouter();
   const [{ status, project }] = useProject(id);
   const [tab, setTab] = React.useState<IntakeSource | "sketch">("recording");

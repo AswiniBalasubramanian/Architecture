@@ -2,14 +2,30 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { loadProject } from "@/lib/persist";
 import type { Project } from "@/lib/types";
 import { buttonClass, Logo } from "./ui/kit";
 
-/** Loads a project from this browser, with loading and not-found states. */
+/** The prerendered shell every /p/<id>/... URL is served from (see src/app/p/[id]/layout.tsx). */
+const SHELL = "_";
+
+/** The project id from the address bar; the route param is the shell's "_" when served from the cache. */
+export function useProjectId() {
+  const params = useParams<{ id: string }>();
+  const fromParams = params.id && params.id !== SHELL ? params.id : "";
+  const [id, setId] = React.useState(fromParams);
+  React.useEffect(() => {
+    setId(fromParams || decodeURIComponent(window.location.pathname.split("/")[2] ?? ""));
+  }, [fromParams]);
+  return id;
+}
+
+/** Loads a project from this browser, with loading and not-found states. An empty id waits. */
 export function useProject(id: string) {
   const [state, setState] = React.useState<{ status: "loading" | "missing" | "ready"; project: Project | null }>({ status: "loading", project: null });
   React.useEffect(() => {
+    if (!id) return;
     const p = loadProject(id);
     setState(p ? { status: "ready", project: p } : { status: "missing", project: null });
   }, [id]);
