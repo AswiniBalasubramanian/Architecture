@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ArrowRight, Check } from "@phosphor-icons/react";
 import { Button, Eyebrow, Field, NumberInput, SiteHeader, Stepper, inputClass } from "@/components/ui/kit";
+import { Select } from "@/components/ui/Select";
 import { CURRENCIES, FACINGS, HOUSE_TYPES, REQUIREMENTS } from "@/lib/catalog";
 import { defaultAssumptions, defaultBrief, footprintOf } from "@/lib/generator";
 import { saveProject } from "@/lib/persist";
@@ -229,11 +230,7 @@ export default function NewProject() {
                 <Stepper id="ba" label="bathrooms" value={brief.bathrooms} min={1} max={6} onChange={(v) => set("bathrooms", v)} />
               </Field>
               <Field label="Currency" htmlFor="cur">
-                <select id="cur" className={inputClass} value={brief.currency} onChange={(e) => set("currency", e.target.value as Currency)}>
-                  {(Object.keys(CURRENCIES) as Currency[]).map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </select>
+                <Select id="cur" value={brief.currency} onChange={(v) => set("currency", v)} options={(Object.keys(CURRENCIES) as Currency[]).map((c) => ({ value: c, label: c }))} />
               </Field>
               <Field label="Budget" htmlFor="budget" error={shown("budget")} hint={Number.isFinite(brief.budget) && brief.budget > 0 ? money(brief.budget, brief.currency) : undefined} className="col-span-2">
                 <NumberInput id="budget" value={brief.budget} onChange={(v) => set("budget", v)} step={50000} suffix={brief.currency} invalid={Boolean(shown("budget"))} />

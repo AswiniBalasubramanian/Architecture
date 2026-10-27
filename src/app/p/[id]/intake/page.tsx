@@ -9,6 +9,7 @@ import { FloorPlan } from "@/components/plan/FloorPlan";
 import { ProjectMissing, ProjectSkeleton, useProject, useProjectId } from "@/components/ProjectGate";
 import { LazyHouseScene, webglAvailable } from "@/components/three/LazyScene";
 import { Button, Eyebrow, Field, Logo, NumberInput, Segmented, Stepper, inputClass } from "@/components/ui/kit";
+import { Select } from "@/components/ui/Select";
 import { CURRENCIES, DIRECTIONS, EXTERIOR_TEMPLATES, FACINGS, HOUSE_TYPES, INTERIOR_TEMPLATES, REQUIREMENTS } from "@/lib/catalog";
 import { generate, materialsFor } from "@/lib/generator";
 import { applyExtraction, type IntakeResult, type IntakeSource, type Suggestion } from "@/lib/intake";
@@ -191,13 +192,7 @@ function Recorder({ onText, disabled }: { onText: (final: string) => void; disab
             <span key={i} className="h-full w-[3px] origin-center rounded-full bg-moss" style={{ transform: "scaleY(0.12)" }} />
           ))}
         </div>
-        <select aria-label="Spoken language" value={lang} disabled={on} onChange={(e) => setLang(e.target.value)} className={clsx(inputClass, "h-9 w-auto text-[13px]")}>
-          {LANGS.map((l) => (
-            <option key={l.value} value={l.value}>
-              {l.label}
-            </option>
-          ))}
-        </select>
+        <Select label="Spoken language" size="sm" value={lang} disabled={on} onChange={setLang} options={LANGS} className="w-[160px]" />
       </div>
       {interim ? <p className="rounded-lg bg-sand/60 px-3 py-2 text-[13px] italic text-muted">{interim}</p> : null}
       {error ? (
@@ -436,37 +431,23 @@ function RulesPanel({ brief, design, onChange }: { brief: Brief; design: Design 
         <p className="text-[12px] leading-relaxed text-muted">No placements were stated. Add one here, or upload a sketch, and the layouts will follow it where they can.</p>
       )}
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        <select aria-label="Room" className={clsx(inputClass, "h-9 w-auto text-[13px]")} value={room} onChange={(e) => setRoom(e.target.value as LayoutRule["room"])}>
-          {RULE_ROOMS.map((r) => (
-            <option key={r} value={r}>
-              {ROOM_LABEL[r]}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Position" className={clsx(inputClass, "h-9 w-auto text-[13px]")} value={where} onChange={(e) => setWhere(e.target.value as Where)}>
-          <optgroup label="Compass">
-            {ZONES.map((z) => (
-              <option key={z} value={z}>
-                {WHERE_LABEL[z]}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="From the road">
-            {PLAN_SPOTS.map((p) => (
-              <option key={p} value={p}>
-                {WHERE_LABEL[p]}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-        <select aria-label="Floor" className={clsx(inputClass, "h-9 w-auto text-[13px]")} value={floor} onChange={(e) => setFloor(e.target.value)}>
-          <option value="any">Any floor</option>
-          {Array.from({ length: brief.floors }, (_, i) => (
-            <option key={i} value={i}>
-              {i === 0 ? "Ground floor" : i === 1 ? "First floor" : "Second floor"}
-            </option>
-          ))}
-        </select>
+        <Select label="Room" size="sm" className="w-[150px]" value={room} onChange={setRoom} options={RULE_ROOMS.map((r) => ({ value: r, label: ROOM_LABEL[r] }))} />
+        <Select<Where>
+          label="Position"
+          size="sm"
+          className="w-[170px]"
+          value={where}
+          onChange={setWhere}
+          options={[...ZONES.map((z) => ({ value: z as Where, label: WHERE_LABEL[z], group: "Compass" })), ...PLAN_SPOTS.map((s) => ({ value: s as Where, label: WHERE_LABEL[s], group: "From the road" }))]}
+        />
+        <Select
+          label="Floor"
+          size="sm"
+          className="w-[130px]"
+          value={floor}
+          onChange={setFloor}
+          options={[{ value: "any", label: "Any floor" }, ...Array.from({ length: brief.floors }, (_, i) => ({ value: String(i), label: i === 0 ? "Ground floor" : i === 1 ? "First floor" : "Second floor" }))]}
+        />
         <Button type="button" size="sm" onClick={() => onChange([...rules, { room, where, floor: floor === "any" ? null : Number(floor), source: "architect" }])}>
           <Plus size={12} weight="bold" /> Add rule
         </Button>
@@ -738,36 +719,20 @@ export default function IntakePage() {
                       node: (
                         <div className="grid grid-cols-[1fr_92px] gap-2">
                           <NumberInput value={brief.budget} onChange={(v) => set("budget", v)} step={50000} />
-                          <select aria-label="Currency" className={inputClass} value={brief.currency} onChange={(e) => set("currency", e.target.value as Currency)}>
-                            {(Object.keys(CURRENCIES) as Currency[]).map((c) => (
-                              <option key={c}>{c}</option>
-                            ))}
-                          </select>
+                          <Select label="Currency" value={brief.currency} onChange={(v) => set("currency", v)} options={(Object.keys(CURRENCIES) as Currency[]).map((c) => ({ value: c, label: c }))} />
                         </div>
                       ),
                     },
                     {
                       key: "facing",
                       node: (
-                        <select aria-label="Road faces" className={inputClass} value={brief.facing ?? "east"} onChange={(e) => set("facing", e.target.value as Facing)}>
-                          {(Object.keys(FACINGS) as Facing[]).map((f) => (
-                            <option key={f} value={f}>
-                              {FACINGS[f]}
-                            </option>
-                          ))}
-                        </select>
+                        <Select label="Road faces" value={brief.facing ?? "east"} onChange={(v) => set("facing", v)} options={(Object.keys(FACINGS) as Facing[]).map((f) => ({ value: f, label: FACINGS[f] }))} />
                       ),
                     },
                     {
                       key: "houseType",
                       node: (
-                        <select aria-label="House type" className={inputClass} value={brief.houseType} onChange={(e) => set("houseType", e.target.value as HouseType)}>
-                          {(Object.keys(HOUSE_TYPES) as HouseType[]).map((t) => (
-                            <option key={t} value={t}>
-                              {HOUSE_TYPES[t].label}
-                            </option>
-                          ))}
-                        </select>
+                        <Select label="House type" value={brief.houseType} onChange={(v) => set("houseType", v)} options={(Object.keys(HOUSE_TYPES) as HouseType[]).map((t) => ({ value: t, label: HOUSE_TYPES[t].label }))} />
                       ),
                     },
                   ].map(({ key, node }) => (
